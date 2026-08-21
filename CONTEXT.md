@@ -19,3 +19,17 @@ _Evitar_: Usuário, colaborador
 **Gestor**:
 Papel de Usuário autorizado a administrar todos os registros pertencentes ao próprio tenant.
 _Evitar_: Administrador global
+
+## Cadastro e integração
+
+**Pré-cadastro**:
+Estado inicial de um Funcionário ainda com informações, documentos ou vínculos operacionais pendentes.
+_Evitar_: Funcionário ativo
+
+**Contratação externa**:
+Registro idempotente que relaciona o identificador de contratação de um sistema de origem ao Pré-cadastro criado no tenant.
+_Evitar_: Usuário, candidatura
+
+**Chave de serviço**:
+Credencial não humana, específica por tenant, usada para autenticar uma integração externa. Somente seu HMAC é persistido.
+_Evitar_: Senha de usuário, segredo de provisionamento

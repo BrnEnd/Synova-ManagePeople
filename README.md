@@ -13,7 +13,7 @@ Portal multi-tenant para gestão de funcionários, competências, documentos e p
 CREATE ROLE synova_provisioner LOGIN PASSWORD '<SENHA_FORTE>';
 GRANT CONNECT ON DATABASE <BANCO> TO synova_provisioner;
 GRANT USAGE ON SCHEMA public TO synova_provisioner;
-GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, users, audit_events, idempotency_records TO synova_provisioner;
+GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, users, audit_events, idempotency_records, service_keys TO synova_provisioner;
 ```
 
 5. Configure `PROVISIONING_DATABASE_URL` com essa role e inicie a aplicação com `npm run dev`.
@@ -63,7 +63,31 @@ curl -X POST "$APP_URL/api/internal/provisioning/users" \
   --data '{"tenantId":"<TENANT_ID>","email":"<EMAIL>","displayName":"<NOME>","role":"manager","temporaryPassword":"<SENHA_TEMPORARIA>"}'
 ```
 
-Use `role: "employee"` para criar um usuário de funcionário. A associação ao cadastro profissional será disponibilizada junto ao módulo de Funcionários.
+Use `role: "employee"` para criar um usuário de funcionário e associe-o ao cadastro profissional pela request seguinte.
+
+### Associar usuário a funcionário
+
+```bash
+curl -X POST "$APP_URL/api/internal/provisioning/users/<USER_ID>/employee" \
+  -H "Authorization: Bearer $PROVISIONING_SECRET" \
+  -H "Idempotency-Key: associacao-<USER_ID>-v1" \
+  -H "Content-Type: application/json" \
+  --data '{"tenantId":"<TENANT_ID>","employeeId":"<EMPLOYEE_ID>"}'
+```
+
+O usuário deve ter papel `employee`, estar ativo e pertencer ao mesmo tenant do funcionário.
+
+### Cadastrar chave do Portal de Vagas
+
+Gere uma chave aleatória de alta entropia no canal operacional e envie seu valor uma única vez. Somente um HMAC não reversível será persistido.
+
+```bash
+curl -X POST "$APP_URL/api/internal/provisioning/service-keys" \
+  -H "Authorization: Bearer $PROVISIONING_SECRET" \
+  -H "Idempotency-Key: portal-vagas-<TENANT_ID>-v1" \
+  -H "Content-Type: application/json" \
+  --data '{"tenantId":"<TENANT_ID>","name":"Portal de Vagas","serviceKey":"<CHAVE_DE_SERVICO_COM_32_OU_MAIS_CARACTERES>"}'
+```
 
 ### Redefinir senha temporária
 
@@ -76,3 +100,17 @@ curl -X POST "$APP_URL/api/internal/provisioning/users/<USER_ID>/password" \
 ```
 
 A senha temporária deve ter de 12 a 128 caracteres e incluir letra maiúscula, letra minúscula, número e símbolo. O usuário será obrigado a trocá-la no primeiro acesso.
+
+## Integração com o Portal de Vagas
+
+A rota está disponível para o futuro consumidor, mas este repositório não altera o Portal de Vagas. Ela exige a chave de serviço cadastrada para o tenant, `externalHiringId` e `Idempotency-Key`.
+
+```bash
+curl -X POST "$APP_URL/api/external/v1/hirings" \
+  -H "Authorization: Bearer $PORTAL_VAGAS_SERVICE_KEY" \
+  -H "Idempotency-Key: contratacao-<EXTERNAL_HIRING_ID>-v1" \
+  -H "Content-Type: application/json" \
+  --data '{"externalHiringId":"<EXTERNAL_HIRING_ID>","fullName":"<NOME>","email":"<EMAIL_OPCIONAL>","document":"<DOCUMENTO_OPCIONAL>"}'
+```
+
+Repetições equivalentes retornam o mesmo pré-cadastro. Reutilizar o identificador externo ou a chave idempotente com outro conteúdo retorna conflito, sem duplicar o funcionário.

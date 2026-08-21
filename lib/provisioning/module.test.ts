@@ -171,4 +171,75 @@ describe('provisionamento', () => {
       idempotencyKey: 'user',
     })).rejects.toBeInstanceOf(IdempotencyConflictError);
   });
+
+  test('associa usuário e funcionário do mesmo tenant de forma idempotente', async () => {
+    const repository = new InMemoryProvisioningRepository();
+    const ids = [
+      '2cd093b3-4d03-4b2b-80a5-f8ec8d7e0eb7',
+      '07050f2f-4fef-47f0-b903-a873b7922e08',
+    ];
+    const provisioning = createProvisioningModule({
+      repository,
+      generateId: () => ids.shift()!,
+      now: () => new Date('2026-08-20T12:00:00.000Z'),
+      hashPassword: async () => ({ salt: 'salt', hash: 'hash' }),
+      idempotencySecret: 'test-idempotency-secret',
+    });
+    const { tenant } = await provisioning.createTenant({ name: 'Synova', slug: 'synova', idempotencyKey: 'tenant' });
+    const { user } = await provisioning.createUser({
+      tenantId: tenant.id,
+      email: 'ana@synova.com',
+      displayName: 'Ana Souza',
+      role: 'employee',
+      temporaryPassword: 'Synova#2026!Inicial',
+      idempotencyKey: 'user',
+    });
+    repository.addEmployee(tenant.id, '8bef33d1-84c9-4233-b888-15e35d5a9193');
+
+    const first = await provisioning.associateUser({
+      tenantId: tenant.id,
+      userId: user.id,
+      employeeId: '8bef33d1-84c9-4233-b888-15e35d5a9193',
+      idempotencyKey: 'association',
+    });
+    const replay = await provisioning.associateUser({
+      tenantId: tenant.id,
+      userId: user.id,
+      employeeId: '8bef33d1-84c9-4233-b888-15e35d5a9193',
+      idempotencyKey: 'association',
+    });
+
+    expect(first).toMatchObject({
+      association: { tenantId: tenant.id, userId: user.id, employeeId: '8bef33d1-84c9-4233-b888-15e35d5a9193' },
+      replayed: false,
+    });
+    expect(replay).toEqual({ ...first, replayed: true });
+  });
+
+  test('cadastra chave de serviço sem expor seu valor ou hash', async () => {
+    const provisioning = createProvisioningModule({
+      repository: new InMemoryProvisioningRepository(),
+      generateId: () => '2cd093b3-4d03-4b2b-80a5-f8ec8d7e0eb7',
+      now: () => new Date('2026-08-20T12:00:00.000Z'),
+      idempotencySecret: 'test-idempotency-secret',
+    });
+
+    const result = await provisioning.createServiceKey({
+      tenantId: '8bef33d1-84c9-4233-b888-15e35d5a9193',
+      name: 'Portal de Vagas',
+      serviceKey: 'service-key-with-more-than-32-characters',
+      idempotencyKey: 'portal-vagas-key',
+    });
+
+    expect(result).toMatchObject({
+      serviceKey: {
+        id: '2cd093b3-4d03-4b2b-80a5-f8ec8d7e0eb7',
+        tenantId: '8bef33d1-84c9-4233-b888-15e35d5a9193',
+        name: 'Portal de Vagas',
+      },
+      replayed: false,
+    });
+    expect(JSON.stringify(result)).not.toContain('service-key-with-more-than-32-characters');
+    expect(result.serviceKey).not.toHaveProperty('keyHash');
+  });
 });

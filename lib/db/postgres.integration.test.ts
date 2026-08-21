@@ -16,19 +16,29 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { createIdentityModule },
       { PostgresIdentityRepository },
       { hashPassword, verifyPassword },
+      { createEmployeesModule },
+      { PostgresEmployeeRepository },
+      { createHiringIntegrationModule },
+      { PostgresHiringRepository },
+      { tenantForServiceKey },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
       import('@/lib/identity/module'),
       import('@/lib/identity/postgres-repository'),
       import('@/lib/identity/password'),
+      import('@/lib/employees/module'),
+      import('@/lib/employees/postgres-repository'),
+      import('@/lib/integrations/hiring/module'),
+      import('@/lib/integrations/hiring/postgres-repository'),
+      import('@/lib/integrations/hiring/service-key-repository'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
     const privileged = postgres(provisioningDatabaseUrl!, { max: 1, prepare: false });
     const tenantSlug = `integration-${randomUUID()}`;
     const temporaryPassword = 'Integration#2026!Inicial';
-    let tenantId: string | undefined;
+    const tenantIds: string[] = [];
 
     try {
       const provisioning = createProvisioningModule({
@@ -43,7 +53,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         slug: tenantSlug,
         idempotencyKey: randomUUID(),
       });
-      tenantId = tenantResult.tenant.id;
+      const tenantId = tenantResult.tenant.id;
+      tenantIds.push(tenantId);
       const userResult = await provisioning.createUser({
         tenantId,
         email: 'manager@integration.test',
@@ -52,6 +63,93 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         temporaryPassword,
         idempotencyKey: randomUUID(),
       });
+      const employeeUserResult = await provisioning.createUser({
+        tenantId,
+        email: 'employee@integration.test',
+        displayName: 'Funcionária de integração',
+        role: 'employee',
+        temporaryPassword,
+        idempotencyKey: randomUUID(),
+      });
+      const otherTenant = await provisioning.createTenant({
+        name: 'Outro tenant de integração',
+        slug: `other-${randomUUID()}`,
+        idempotencyKey: randomUUID(),
+      });
+      tenantIds.push(otherTenant.tenant.id);
+      const otherTenantUser = await provisioning.createUser({
+        tenantId: otherTenant.tenant.id,
+        email: 'employee@other-integration.test',
+        displayName: 'Funcionária de outro tenant',
+        role: 'employee',
+        temporaryPassword,
+        idempotencyKey: randomUUID(),
+      });
+
+      const employeesModule = createEmployeesModule({
+        repository: new PostgresEmployeeRepository(),
+        generateId: randomUUID,
+        now: () => new Date(),
+      });
+      const employee = await employeesModule.create({
+        tenantId,
+        actorUserId: userResult.user.id,
+        fullName: 'Funcionária de integração',
+        email: employeeUserResult.user.email,
+      });
+      await expect(provisioning.associateUser({
+        tenantId,
+        userId: employeeUserResult.user.id,
+        employeeId: employee.id,
+        idempotencyKey: randomUUID(),
+      })).resolves.toMatchObject({
+        association: { tenantId, userId: employeeUserResult.user.id, employeeId: employee.id },
+        replayed: false,
+      });
+
+      const rawServiceKey = `service-key-${randomUUID()}-${randomUUID()}`;
+      await provisioning.createServiceKey({
+        tenantId,
+        name: 'Portal de Vagas',
+        serviceKey: rawServiceKey,
+        idempotencyKey: randomUUID(),
+      });
+      await expect(tenantForServiceKey(rawServiceKey, 'integration-idempotency-secret')).resolves.toBe(tenantId);
+      const hiringIntegration = createHiringIntegrationModule({
+        repository: new PostgresHiringRepository(),
+        generateId: randomUUID,
+        now: () => new Date(),
+        idempotencySecret: 'integration-idempotency-secret',
+      });
+      const externalCommand = {
+        tenantId,
+        externalHiringId: `hiring-${randomUUID()}`,
+        idempotencyKey: randomUUID(),
+        fullName: 'Contratação externa',
+        email: 'external@integration.test',
+      };
+      const externalEmployee = await hiringIntegration.createPreRegistration(externalCommand);
+      await expect(hiringIntegration.createPreRegistration(externalCommand)).resolves.toMatchObject({
+        employee: { id: externalEmployee.employee.id, tenantId },
+        replayed: true,
+      });
+
+      await expect(normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        await transaction`
+          insert into employees (id, tenant_id, user_id, full_name)
+          values (${randomUUID()}, ${tenantId}, ${otherTenantUser.user.id}, 'Vínculo cruzado')
+        `;
+      })).rejects.toThrow();
+
+      const employeeVisibility = await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        const own = await transaction<{ count: string }[]>`select count(*)::text as count from employees`;
+        await transaction`select set_config('app.tenant_id', ${otherTenant.tenant.id}, true)`;
+        const other = await transaction<{ count: string }[]>`select count(*)::text as count from employees`;
+        return { own: Number(own[0].count), other: Number(other[0].count) };
+      });
+      expect(employeeVisibility).toEqual({ own: 2, other: 0 });
 
       const [normalRole] = await normal<{
         current_user: string;
@@ -101,7 +199,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         const rows = await transaction<{ count: string }[]>`select count(*)::text as count from users`;
         return Number(rows[0].count);
       });
-      expect(scopedUserCount).toBe(1);
+      expect(scopedUserCount).toBe(2);
 
       const identity = createIdentityModule({
         repository: new PostgresIdentityRepository(),
@@ -142,22 +240,29 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       const audit = await privileged<{ event_type: string }[]>`
         select event_type from audit_events where tenant_id = ${tenantId} order by occurred_at
       `;
-      expect(audit.map((event) => event.event_type)).toEqual([
+      expect(audit.map((event) => event.event_type)).toEqual(expect.arrayContaining([
         'tenant.created',
         'user.created',
+        'employee.created',
+        'employee.user_associated',
+        'service_key.created',
+        'employee.external_pre_registered',
         'user.logged_in',
-      ]);
+      ]));
     } finally {
-      if (tenantId) {
+      for (const tenantId of tenantIds) {
         await normal.begin(async (transaction) => {
-          await transaction`select set_config('app.tenant_id', ${tenantId!}, true)`;
-          await transaction`delete from login_attempts where tenant_id = ${tenantId!}`;
+          await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+          await transaction`delete from login_attempts where tenant_id = ${tenantId}`;
+          await transaction`delete from external_hiring_records where tenant_id = ${tenantId}`;
+          await transaction`delete from employees where tenant_id = ${tenantId}`;
         });
         await privileged.begin(async (transaction) => {
-          await transaction`delete from idempotency_records where tenant_id = ${tenantId!}`;
-          await transaction`delete from audit_events where tenant_id = ${tenantId!}`;
-          await transaction`delete from users where tenant_id = ${tenantId!}`;
-          await transaction`delete from tenants where id = ${tenantId!}`;
+          await transaction`delete from idempotency_records where tenant_id = ${tenantId}`;
+          await transaction`delete from audit_events where tenant_id = ${tenantId}`;
+          await transaction`delete from service_keys where tenant_id = ${tenantId}`;
+          await transaction`delete from users where tenant_id = ${tenantId}`;
+          await transaction`delete from tenants where id = ${tenantId}`;
         });
       }
       await Promise.all([normal.end(), privileged.end()]);

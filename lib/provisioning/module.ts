@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { serviceKeyHash } from '@/lib/integrations/service-key';
 
 export type TenantStatus = 'active' | 'inactive';
 
@@ -27,6 +28,14 @@ export type User = {
 export type UserCredentials = {
   passwordSalt: string;
   passwordHash: string;
+};
+
+export type ServiceKey = {
+  id: string;
+  tenantId: string;
+  name: string;
+  createdAt: Date;
+  revokedAt: Date | null;
 };
 
 type CreateTenantCommand = {
@@ -73,6 +82,39 @@ type ResetPasswordPersistence = {
   changedAt: Date;
 };
 
+export type UserEmployeeAssociation = {
+  tenantId: string;
+  userId: string;
+  employeeId: string;
+  associatedAt: Date;
+};
+
+type AssociateUserCommand = {
+  tenantId: string;
+  userId: string;
+  employeeId: string;
+  idempotencyKey: string;
+};
+
+type AssociateUserPersistence = AssociateUserCommand & {
+  requestHash: string;
+  associatedAt: Date;
+};
+
+type CreateServiceKeyCommand = {
+  tenantId: string;
+  name: string;
+  serviceKey: string;
+  idempotencyKey: string;
+};
+
+type CreateServiceKeyPersistence = {
+  serviceKey: ServiceKey;
+  keyHash: string;
+  idempotencyKey: string;
+  requestHash: string;
+};
+
 export type ProvisioningRepository = {
   createTenantIdempotently(input: CreateTenantPersistence): Promise<{
     tenant: Tenant;
@@ -86,6 +128,16 @@ export type ProvisioningRepository = {
   }>;
   resetPasswordIdempotently(input: ResetPasswordPersistence): Promise<{
     user: User;
+    replayed: boolean;
+    requestHash: string;
+  }>;
+  associateUserIdempotently(input: AssociateUserPersistence): Promise<{
+    association: UserEmployeeAssociation;
+    replayed: boolean;
+    requestHash: string;
+  }>;
+  createServiceKeyIdempotently(input: CreateServiceKeyPersistence): Promise<{
+    serviceKey: ServiceKey;
     replayed: boolean;
     requestHash: string;
   }>;
@@ -124,6 +176,14 @@ function hashUserRequest(secret: string, input: Pick<CreateUserCommand, 'tenantI
 
 function hashPasswordResetRequest(secret: string, tenantId: string, userId: string, temporaryPassword: string) {
   return fingerprint(secret, { tenantId, userId, temporaryPassword });
+}
+
+function hashAssociationRequest(secret: string, tenantId: string, userId: string, employeeId: string) {
+  return fingerprint(secret, { tenantId, userId, employeeId });
+}
+
+function hashServiceKeyRequest(secret: string, tenantId: string, name: string, serviceKey: string) {
+  return fingerprint(secret, { tenantId, name, serviceKey });
 }
 
 export function createProvisioningModule(dependencies: ProvisioningDependencies) {
@@ -214,6 +274,46 @@ export function createProvisioningModule(dependencies: ProvisioningDependencies)
       });
       if (result.requestHash !== requestHash) throw new IdempotencyConflictError();
       return { user: result.user, replayed: result.replayed };
+    },
+
+    async associateUser(command: AssociateUserCommand) {
+      const requestHash = hashAssociationRequest(
+        dependencies.idempotencySecret,
+        command.tenantId,
+        command.userId,
+        command.employeeId,
+      );
+      const result = await dependencies.repository.associateUserIdempotently({
+        ...command,
+        requestHash,
+        associatedAt: dependencies.now(),
+      });
+      if (result.requestHash !== requestHash) throw new IdempotencyConflictError();
+      return { association: result.association, replayed: result.replayed };
+    },
+
+    async createServiceKey(command: CreateServiceKeyCommand) {
+      const name = command.name.trim();
+      const requestHash = hashServiceKeyRequest(
+        dependencies.idempotencySecret,
+        command.tenantId,
+        name,
+        command.serviceKey,
+      );
+      const result = await dependencies.repository.createServiceKeyIdempotently({
+        serviceKey: {
+          id: dependencies.generateId(),
+          tenantId: command.tenantId,
+          name,
+          createdAt: dependencies.now(),
+          revokedAt: null,
+        },
+        keyHash: serviceKeyHash(command.serviceKey, dependencies.idempotencySecret),
+        idempotencyKey: command.idempotencyKey,
+        requestHash,
+      });
+      if (result.requestHash !== requestHash) throw new IdempotencyConflictError();
+      return { serviceKey: result.serviceKey, replayed: result.replayed };
     },
   };
 }

@@ -1,5 +1,6 @@
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -14,6 +15,7 @@ import {
 export const tenantStatus = pgEnum('tenant_status', ['active', 'inactive']);
 export const userRole = pgEnum('user_role', ['manager', 'employee']);
 export const userStatus = pgEnum('user_status', ['active', 'inactive']);
+export const employeeStatus = pgEnum('employee_status', ['pre_registration', 'active', 'inactive']);
 
 export const tenants = pgTable('tenants', {
   id: uuid('id').primaryKey(),
@@ -39,7 +41,64 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex('users_tenant_email_unique').on(table.tenantId, table.email),
+  uniqueIndex('users_tenant_id_id_unique').on(table.tenantId, table.id),
   index('users_tenant_role_idx').on(table.tenantId, table.role),
+]);
+
+export const employees = pgTable('employees', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  userId: uuid('user_id'),
+  fullName: text('full_name').notNull(),
+  email: text('email'),
+  document: text('document'),
+  status: employeeStatus('status').notNull().default('pre_registration'),
+  onboardingPending: boolean('onboarding_pending').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  inactivatedAt: timestamp('inactivated_at', { withTimezone: true, mode: 'date' }),
+}, (table) => [
+  uniqueIndex('employees_tenant_user_unique').on(table.tenantId, table.userId),
+  uniqueIndex('employees_tenant_id_id_unique').on(table.tenantId, table.id),
+  foreignKey({
+    columns: [table.tenantId, table.userId],
+    foreignColumns: [users.tenantId, users.id],
+    name: 'employees_tenant_user_fk',
+  }),
+  index('employees_tenant_status_idx').on(table.tenantId, table.status),
+  index('employees_tenant_name_idx').on(table.tenantId, table.fullName),
+]);
+
+export const serviceKeys = pgTable('service_keys', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  name: text('name').notNull(),
+  keyHash: text('key_hash').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true, mode: 'date' }),
+}, (table) => [
+  uniqueIndex('service_keys_hash_unique').on(table.keyHash),
+  index('service_keys_tenant_created_idx').on(table.tenantId, table.createdAt),
+]);
+
+export const externalHiringRecords = pgTable('external_hiring_records', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  externalHiringId: text('external_hiring_id').notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  employeeId: uuid('employee_id').notNull(),
+  requestHash: text('request_hash').notNull(),
+  missingFields: jsonb('missing_fields').$type<string[]>().notNull().default([]),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('external_hiring_tenant_external_unique').on(table.tenantId, table.externalHiringId),
+  uniqueIndex('external_hiring_tenant_idempotency_unique').on(table.tenantId, table.idempotencyKey),
+  index('external_hiring_tenant_created_idx').on(table.tenantId, table.createdAt),
+  foreignKey({
+    columns: [table.tenantId, table.employeeId],
+    foreignColumns: [employees.tenantId, employees.id],
+    name: 'external_hiring_tenant_employee_fk',
+  }),
 ]);
 
 export const auditEvents = pgTable('audit_events', {

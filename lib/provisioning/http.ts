@@ -28,6 +28,17 @@ const resetPasswordSchema = z.object({
   temporaryPassword: strongPasswordSchema,
 }).strict();
 
+const associationSchema = z.object({
+  tenantId: z.uuid(),
+  employeeId: z.uuid(),
+}).strict();
+
+const serviceKeySchema = z.object({
+  tenantId: z.uuid(),
+  name: z.string().trim().min(2).max(120),
+  serviceKey: z.string().min(32).max(256),
+}).strict();
+
 function isAuthorized(request: Request, secret: string) {
   const authorization = request.headers.get('authorization');
   if (!authorization?.startsWith('Bearer ')) return false;
@@ -115,6 +126,43 @@ export function createProvisioningHttp({ provisioning, secret }: ProvisioningHtt
           idempotencyKey: key,
         });
         return Response.json(result);
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+
+    async associateUser(request: Request, userId: string) {
+      const unauthorized = authorize(request);
+      if (unauthorized) return unauthorized;
+      const key = idempotencyKey(request);
+      if (!key) return Response.json({ error: 'Idempotency-Key é obrigatório.' }, { status: 400 });
+      const parsedUserId = z.uuid().safeParse(userId);
+      const parsed = associationSchema.safeParse(await parseJson(request));
+      if (!parsedUserId.success || !parsed.success) {
+        return Response.json({ error: 'Dados da associação inválidos.' }, { status: 422 });
+      }
+      try {
+        const result = await provisioning.associateUser({
+          ...parsed.data,
+          userId: parsedUserId.data,
+          idempotencyKey: key,
+        });
+        return Response.json(result);
+      } catch (error) {
+        return errorResponse(error);
+      }
+    },
+
+    async createServiceKey(request: Request) {
+      const unauthorized = authorize(request);
+      if (unauthorized) return unauthorized;
+      const key = idempotencyKey(request);
+      if (!key) return Response.json({ error: 'Idempotency-Key é obrigatório.' }, { status: 400 });
+      const parsed = serviceKeySchema.safeParse(await parseJson(request));
+      if (!parsed.success) return Response.json({ error: 'Dados da chave de serviço inválidos.' }, { status: 422 });
+      try {
+        const result = await provisioning.createServiceKey({ ...parsed.data, idempotencyKey: key });
+        return Response.json(result, { status: result.replayed ? 200 : 201 });
       } catch (error) {
         return errorResponse(error);
       }

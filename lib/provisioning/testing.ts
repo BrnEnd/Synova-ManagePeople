@@ -12,6 +12,19 @@ export class InMemoryProvisioningRepository implements ProvisioningRepository {
     requestHash: string;
     user: Parameters<ProvisioningRepository['createUserIdempotently']>[0]['user'];
   }>();
+  private readonly employees = new Map<string, { tenantId: string; userId: string | null }>();
+  private readonly associationRequests = new Map<string, {
+    requestHash: string;
+    association: Awaited<ReturnType<ProvisioningRepository['associateUserIdempotently']>>['association'];
+  }>();
+  private readonly serviceKeyRequests = new Map<string, {
+    requestHash: string;
+    serviceKey: Parameters<ProvisioningRepository['createServiceKeyIdempotently']>[0]['serviceKey'];
+  }>();
+
+  addEmployee(tenantId: string, employeeId: string) {
+    this.employees.set(employeeId, { tenantId, userId: null });
+  }
 
   async createTenantIdempotently(input: Parameters<ProvisioningRepository['createTenantIdempotently']>[0]) {
     const existing = this.tenantRequests.get(input.idempotencyKey);
@@ -37,7 +50,8 @@ export class InMemoryProvisioningRepository implements ProvisioningRepository {
   }
 
   async createUserIdempotently(input: Parameters<ProvisioningRepository['createUserIdempotently']>[0]) {
-    const existing = this.userRequests.get(input.idempotencyKey);
+    const requestKey = `${input.user.tenantId}:create:${input.idempotencyKey}`;
+    const existing = this.userRequests.get(requestKey);
     if (existing) {
       return {
         user: existing.user,
@@ -50,7 +64,7 @@ export class InMemoryProvisioningRepository implements ProvisioningRepository {
       throw new Error('Tenant não encontrado.');
     }
 
-    this.userRequests.set(input.idempotencyKey, {
+    this.userRequests.set(requestKey, {
       requestHash: input.requestHash,
       user: input.user,
     });
@@ -63,7 +77,7 @@ export class InMemoryProvisioningRepository implements ProvisioningRepository {
   }
 
   async resetPasswordIdempotently(input: Parameters<ProvisioningRepository['resetPasswordIdempotently']>[0]) {
-    const requestKey = `reset:${input.idempotencyKey}`;
+    const requestKey = `${input.tenantId}:reset:${input.idempotencyKey}`;
     const existing = this.userRequests.get(requestKey);
     if (existing) {
       return { user: existing.user, replayed: true, requestHash: existing.requestHash };
@@ -73,5 +87,41 @@ export class InMemoryProvisioningRepository implements ProvisioningRepository {
     const user = { ...source.user, mustChangePassword: true };
     this.userRequests.set(requestKey, { user, requestHash: input.requestHash });
     return { user, replayed: false, requestHash: input.requestHash };
+  }
+
+  async associateUserIdempotently(input: Parameters<ProvisioningRepository['associateUserIdempotently']>[0]) {
+    const requestKey = `${input.tenantId}:${input.idempotencyKey}`;
+    const existing = this.associationRequests.get(requestKey);
+    if (existing) return { ...existing, replayed: true };
+    const employee = this.employees.get(input.employeeId);
+    const user = [...this.userRequests.values()].find(({ user: candidate }) => (
+      candidate.id === input.userId
+      && candidate.tenantId === input.tenantId
+      && candidate.role === 'employee'
+    ))?.user;
+    if (!employee || employee.tenantId !== input.tenantId || !user) {
+      throw new Error('Usuário ou funcionário não encontrado.');
+    }
+    if (employee.userId && employee.userId !== input.userId) throw new Error('Funcionário já associado.');
+    employee.userId = input.userId;
+    const association = {
+      tenantId: input.tenantId,
+      userId: input.userId,
+      employeeId: input.employeeId,
+      associatedAt: input.associatedAt,
+    };
+    this.associationRequests.set(requestKey, { requestHash: input.requestHash, association });
+    return { association, replayed: false, requestHash: input.requestHash };
+  }
+
+  async createServiceKeyIdempotently(input: Parameters<ProvisioningRepository['createServiceKeyIdempotently']>[0]) {
+    const requestKey = `${input.serviceKey.tenantId}:${input.idempotencyKey}`;
+    const existing = this.serviceKeyRequests.get(requestKey);
+    if (existing) return { ...existing, replayed: true };
+    this.serviceKeyRequests.set(requestKey, {
+      requestHash: input.requestHash,
+      serviceKey: input.serviceKey,
+    });
+    return { serviceKey: input.serviceKey, replayed: false, requestHash: input.requestHash };
   }
 }
