@@ -49,7 +49,10 @@ describe('request externa de contratação', () => {
     await expect(first.json()).resolves.toMatchObject({
       employee: { tenantId: 'tenant-a', fullName: 'Ana Souza' },
       externalHiringId: 'hiring-123',
-      missingFields: ['document', 'contract', 'allocation', 'financialCondition'],
+      missingFields: expect.arrayContaining([
+        'identificationDocument', 'phone', 'corporateEmail', 'address', 'entryDate',
+        'professionalTitle', 'identificationDocumentFile', 'contract', 'allocation', 'financialCondition',
+      ]),
       replayed: false,
     });
   });

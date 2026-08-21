@@ -1,15 +1,16 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 
 export type EmployeeListItem = {
   id: string;
   fullName: string;
-  email: string | null;
-  document: string | null;
+  personalEmail: string | null;
   status: 'pre_registration' | 'active' | 'inactive';
   onboardingPending: boolean;
+  missingFields: string[];
   userId: string | null;
   createdAt: string;
 };
@@ -105,13 +106,13 @@ export function EmployeeManager({ employees }: { employees: EmployeeListItem[] }
               <li className="flex flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6" key={employee.id}>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-black text-white">{employee.fullName}</p>
+                    <Link className="truncate font-black text-white underline-offset-4 hover:underline" href={`/gestao/funcionarios/${employee.id}`}>{employee.fullName}</Link>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusClass[employee.status]}`}>{statusLabel[employee.status]}</span>
                     {employee.onboardingPending && employee.status !== 'inactive' && (
                       <span className="rounded-full border border-orange-300/20 bg-orange-300/10 px-2.5 py-1 text-xs font-bold text-orange-200">Documentação pendente</span>
                     )}
                   </div>
-                  <p className="mt-2 truncate text-sm text-zinc-400">{employee.email || 'E-mail ainda não informado'}</p>
+                  <p className="mt-2 truncate text-sm text-zinc-400">{employee.personalEmail || 'E-mail ainda não informado'}</p>
                   <p className="mt-1 text-xs text-zinc-600">{employee.userId ? 'Acesso associado' : 'Sem acesso ao portal'} · Criado em {new Intl.DateTimeFormat('pt-BR').format(new Date(employee.createdAt))}</p>
                 </div>
                 <button

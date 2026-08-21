@@ -21,6 +21,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { createHiringIntegrationModule },
       { PostgresHiringRepository },
       { tenantForServiceKey },
+      { createDocumentsModule },
+      { PostgresDocumentRepository },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
@@ -32,6 +34,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       import('@/lib/integrations/hiring/module'),
       import('@/lib/integrations/hiring/postgres-repository'),
       import('@/lib/integrations/hiring/service-key-repository'),
+      import('@/lib/documents/module'),
+      import('@/lib/documents/postgres-repository'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
@@ -107,6 +111,49 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         replayed: false,
       });
 
+      const documentsModule = createDocumentsModule({
+        repository: new PostgresDocumentRepository(),
+        generateId: randomUUID,
+        now: () => new Date(),
+      });
+      const employeeDocument = await documentsModule.recordUpload({
+        tenantId,
+        employeeId: employee.id,
+        actorUserId: userResult.user.id,
+        type: 'identification',
+        origin: 'manager',
+        originalName: 'identificacao.pdf',
+        pathname: `tenants/${tenantId}/employees/${employee.id}/${randomUUID()}.pdf`,
+        mimeType: 'application/pdf',
+        size: 1024,
+      });
+      expect(employeeDocument.replayed).toBe(false);
+      await expect(employeesModule.update({
+        tenantId,
+        employeeId: employee.id,
+        actorUserId: userResult.user.id,
+        status: 'active',
+        profile: {
+          fullName: employee.fullName,
+          personalEmail: employeeUserResult.user.email,
+          corporateEmail: 'employee@synova.integration',
+          phone: '+55 11 99999-9999',
+          identificationDocument: '12345678900',
+          address: {
+            street: 'Rua da Integração', city: 'São Paulo', state: 'SP', postalCode: '01000-000', country: 'Brasil',
+          },
+          entryDate: '2026-08-01',
+          professionalTitle: 'Consultora',
+          employmentType: 'pj',
+        },
+      })).resolves.toMatchObject({ status: 'active', onboardingPending: false, missingFields: [] });
+      await expect(employeesModule.addNote({
+        tenantId,
+        employeeId: employee.id,
+        actorUserId: userResult.user.id,
+        content: 'Anotação da integração',
+      })).resolves.toMatchObject({ authorName: 'Gestão de integração' });
+
       const rawServiceKey = `service-key-${randomUUID()}-${randomUUID()}`;
       await provisioning.createServiceKey({
         tenantId,
@@ -150,6 +197,23 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         return { own: Number(own[0].count), other: Number(other[0].count) };
       });
       expect(employeeVisibility).toEqual({ own: 2, other: 0 });
+
+      const documentVisibility = await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        const own = await transaction<{ count: string }[]>`select count(*)::text as count from documents`;
+        await transaction`select set_config('app.tenant_id', ${otherTenant.tenant.id}, true)`;
+        const other = await transaction<{ count: string }[]>`select count(*)::text as count from documents`;
+        return { own: Number(own[0].count), other: Number(other[0].count) };
+      });
+      expect(documentVisibility).toEqual({ own: 1, other: 0 });
+
+      await expect(normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        await transaction`
+          insert into employee_notes (id, tenant_id, employee_id, author_user_id, content)
+          values (${randomUUID()}, ${tenantId}, ${employee.id}, ${otherTenantUser.user.id}, 'Autor cruzado')
+        `;
+      })).rejects.toThrow();
 
       const [normalRole] = await normal<{
         current_user: string;
@@ -245,6 +309,9 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         'user.created',
         'employee.created',
         'employee.user_associated',
+        'document.uploaded',
+        'employee.updated',
+        'employee.note_added',
         'service_key.created',
         'employee.external_pre_registered',
         'user.logged_in',
@@ -254,6 +321,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         await normal.begin(async (transaction) => {
           await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
           await transaction`delete from login_attempts where tenant_id = ${tenantId}`;
+          await transaction`delete from employee_notes where tenant_id = ${tenantId}`;
+          await transaction`delete from documents where tenant_id = ${tenantId}`;
           await transaction`delete from external_hiring_records where tenant_id = ${tenantId}`;
           await transaction`delete from employees where tenant_id = ${tenantId}`;
         });

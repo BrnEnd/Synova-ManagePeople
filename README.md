@@ -20,6 +20,14 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, users, audit_events, idempotenc
 
 `DATABASE_URL` deve usar outra role, sem superusuário, sem `BYPASSRLS` e sem vínculo com `synova_provisioner`. A separação de credenciais impede que requests normais contornem as políticas de tenant no Postgres.
 
+Quando a role comum não for proprietária das tabelas, conceda a ela `SELECT, INSERT, UPDATE, DELETE` nas tabelas operacionais após cada migração. As políticas de RLS continuam sendo aplicadas mesmo com esses privilégios.
+
+## Documentos
+
+Documentos aceitam PDF, JPEG, PNG e WebP de até 25 MB. Em desenvolvimento, quando Blob não está configurado, os arquivos ficam em `.data/uploads`, que é ignorado pelo Git. Em produção, configure uma store privada da Vercel por OIDC (`BLOB_STORE_ID`) ou `BLOB_READ_WRITE_TOKEN`.
+
+Com Blob configurado, o navegador envia arquivos diretamente por upload multipart. A aplicação emite o token somente após autenticar o gestor, restringe tipo, tamanho e pathname ao tenant/funcionário e registra os metadados após conferir o objeto armazenado. Downloads sempre passam por uma rota autenticada; o endereço bruto do blob não é exposto na interface.
+
 Verificações disponíveis:
 
 ```bash

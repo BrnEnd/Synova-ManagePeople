@@ -33,3 +33,15 @@ _Evitar_: Usuário, candidatura
 **Chave de serviço**:
 Credencial não humana, específica por tenant, usada para autenticar uma integração externa. Somente seu HMAC é persistido.
 _Evitar_: Senha de usuário, segredo de provisionamento
+
+**Pendência de onboarding**:
+Campo obrigatório ou arquivo ainda necessário para permitir a ativação de um Funcionário. É recalculada quando o perfil ou os documentos mudam.
+_Evitar_: Erro de cadastro, status da competência
+
+**Documento**:
+Arquivo privado e contextualizado por tenant, Funcionário, tipo, origem e responsável pelo envio. O registro de metadados não concede acesso direto ao objeto armazenado.
+_Evitar_: Anexo público, URL solta
+
+**Anotação gerencial**:
+Registro textual imutável no histórico de um Funcionário, com autor e horário. Complementa eventos automáticos sem substituí-los.
+_Evitar_: Campo de observação sobrescrito

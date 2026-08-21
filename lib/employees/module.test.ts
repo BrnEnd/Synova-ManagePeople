@@ -26,9 +26,10 @@ describe('funcionários', () => {
     });
 
     expect(employee).toMatchObject({
-      tenantId: tenantA, fullName: 'Ana Souza', email: 'ana@example.com', document: '123',
-      status: 'pre_registration', onboardingPending: true,
+      tenantId: tenantA, fullName: 'Ana Souza', personalEmail: 'ana@example.com',
+      identificationDocument: '123', status: 'pre_registration', onboardingPending: true,
     });
+    expect(employee.missingFields).toContain('identificationDocumentFile');
     expect(repository.events).toEqual([{ eventType: 'employee.created', employeeId: employee.id }]);
   });
 
@@ -89,5 +90,74 @@ describe('funcionários', () => {
       eventType: 'employee.user_associated',
       employeeId: employee.id,
     });
+  });
+
+  test('completa o perfil, preserva PJ e permite ativação após receber identificação', async () => {
+    const { module, repository } = subject();
+    const employee = await module.create({ tenantId: tenantA, actorUserId: actor, fullName: 'Ana Souza' });
+    repository.addIdentificationDocument(tenantA, employee.id);
+
+    const updated = await module.update({
+      tenantId: tenantA,
+      employeeId: employee.id,
+      actorUserId: actor,
+      status: 'active',
+      profile: {
+        fullName: ' Ana Souza ',
+        personalEmail: 'ANA@EXAMPLE.COM',
+        corporateEmail: 'ANA@SYNOVA.COM.BR',
+        phone: '+55 11 99999-9999',
+        identificationDocument: '123.456.789-00',
+        address: {
+          street: 'Rua Um', city: 'São Paulo', state: 'sp', postalCode: '01000-000', country: 'Brasil',
+        },
+        entryDate: '2026-08-01',
+        professionalTitle: 'Engenheira de Software',
+        employmentType: 'PJ',
+      },
+    });
+
+    expect(updated).toMatchObject({
+      status: 'active', onboardingPending: false, missingFields: [], employmentType: 'pj',
+      personalEmail: 'ana@example.com', corporateEmail: 'ana@synova.com.br',
+      address: { state: 'SP' },
+    });
+    expect(repository.events.at(-1)).toEqual({ eventType: 'employee.updated', employeeId: employee.id });
+  });
+
+  test('não ativa funcionário enquanto houver pendências de onboarding', async () => {
+    const { module } = subject();
+    const employee = await module.create({ tenantId: tenantA, actorUserId: actor, fullName: 'Ana Souza' });
+
+    await expect(module.update({
+      tenantId: tenantA,
+      employeeId: employee.id,
+      actorUserId: actor,
+      status: 'active',
+      profile: {
+        fullName: employee.fullName,
+        personalEmail: null,
+        corporateEmail: null,
+        phone: null,
+        identificationDocument: null,
+        address: null,
+        entryDate: null,
+        professionalTitle: null,
+        employmentType: 'pj',
+      },
+    })).rejects.toThrow('Conclua as pendências');
+  });
+
+  test('registra anotação com autor e não permite escrever em outro tenant', async () => {
+    const { module, repository } = subject();
+    const employee = await module.create({ tenantId: tenantA, actorUserId: actor, fullName: 'Ana Souza' });
+
+    await expect(module.addNote({
+      tenantId: tenantA, employeeId: employee.id, actorUserId: actor, content: ' Acompanhamento iniciado. ',
+    })).resolves.toMatchObject({ content: 'Acompanhamento iniciado.', authorName: 'Gestor de teste' });
+    await expect(module.addNote({
+      tenantId: tenantB, employeeId: employee.id, actorUserId: actor, content: 'Tentativa cruzada',
+    })).rejects.toThrow('Funcionário não encontrado.');
+    expect(repository.events.filter((event) => event.eventType === 'employee.note_added')).toHaveLength(1);
   });
 });

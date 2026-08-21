@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import type { Employee } from '@/lib/employees/module';
+import { employeeMissingFields, type Employee, type EmployeeProfile } from '@/lib/employees/module';
 
 export type HiringRecord = {
   id: string;
@@ -67,9 +67,20 @@ export function createHiringIntegrationModule(dependencies: Dependencies) {
       };
       const requestHash = createHmac('sha256', dependencies.idempotencySecret)
         .update(JSON.stringify(request)).digest('hex');
+      const profile: EmployeeProfile = {
+        fullName,
+        personalEmail: email,
+        corporateEmail: null,
+        phone: null,
+        identificationDocument: document,
+        address: null,
+        entryDate: null,
+        professionalTitle: null,
+        employmentType: 'pj',
+      };
+      const onboardingMissingFields = employeeMissingFields(profile, false);
       const missingFields = [
-        ...(!email ? ['email'] : []),
-        ...(!document ? ['document'] : []),
+        ...onboardingMissingFields,
         'contract',
         'allocation',
         'financialCondition',
@@ -81,11 +92,10 @@ export function createHiringIntegrationModule(dependencies: Dependencies) {
           id: employeeId,
           tenantId: command.tenantId,
           userId: null,
-          fullName,
-          email,
-          document,
+          ...profile,
           status: 'pre_registration',
-          onboardingPending: missingFields.length > 0,
+          onboardingPending: onboardingMissingFields.length > 0,
+          missingFields: onboardingMissingFields,
           createdAt,
           inactivatedAt: null,
         },

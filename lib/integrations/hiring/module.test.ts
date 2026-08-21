@@ -30,11 +30,14 @@ describe('integração de contratações', () => {
       employee: {
         tenantId: 'tenant-a',
         fullName: 'Ana Souza',
-        email: 'ana@example.com',
+        personalEmail: 'ana@example.com',
         status: 'pre_registration',
         onboardingPending: true,
       },
-      missingFields: ['document', 'contract', 'allocation', 'financialCondition'],
+      missingFields: expect.arrayContaining([
+        'identificationDocument', 'phone', 'corporateEmail', 'address', 'entryDate',
+        'professionalTitle', 'identificationDocumentFile', 'contract', 'allocation', 'financialCondition',
+      ]),
       replayed: false,
     });
     expect(replay).toEqual({ ...first, replayed: true });
