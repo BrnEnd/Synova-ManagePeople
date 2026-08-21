@@ -4,7 +4,35 @@ Este arquivo é o ponto de retomada operacional da V1 descrita no issue GitHub #
 
 ## Checkpoint atual
 
-**Etapa 8 — Infraestrutura, segredos, deploy e validação em produção** (`codex/complete-v1`, commit desta etapa)
+**Portal canônico e provisionamento permanente** (`codex/production-portal-record`, commit desta etapa)
+
+Entregue neste checkpoint:
+
+- aplicação publicada em `https://www.synovadigital.com.br/portal`, com o People independente atrás do gateway do site Synova;
+- login sem campo de organização e tenant operacional fixo em `synova`;
+- URL técnica protegida pelo segredo compartilhado do gateway e redirecionada para a URL canônica;
+- exceções diretas limitadas ao cron autenticado e ao callback assinado do Vercel Blob;
+- `main` do People em `e4c5727` e `main` do site Synova em `c44cd67`;
+- deployment People `dpl_EGtNY84PuhkMQyTUyyeb6m5UeLMh` em estado `Ready`;
+- tenant permanente `Synova`, gestores Bruno, Carolina e Richard, e funcionário de homologação criados em produção;
+- funcionário ativo e vinculado ao usuário, com documento sintético de identificação, contrato vigente, cliente `Homologação Synova`, alocação vigente sob Bruno, condição financeira de R$ 100/h e condição comercial de R$ 200/h;
+- nenhuma competência, Nota Fiscal ou pagamento criado pelo provisionamento.
+
+Validação deste checkpoint:
+
+- login dos quatro usuários respondeu HTTP 200 com papel correto e troca obrigatória de senha;
+- cookie de sessão limitado a `Path=/portal`;
+- página de login, assets, APIs e redirecionamentos validados no domínio canônico;
+- upload privado completado e registrado no Vercel Blob;
+- cron respondeu HTTP 401 sem segredo e HTTP 200 com segredo, sem processar fora da janela do fechamento;
+- URL técnica de interface respondeu HTTP 307 para o domínio canônico;
+- banco confirmou onboarding completo, vínculo do usuário, vigências e valores; competências e pagamentos permaneceram zerados.
+
+As senhas temporárias não estão versionadas e devem ser entregues uma única vez pelos canais operacionais.
+
+## Checkpoint anterior
+
+**Etapa 8 — Infraestrutura, segredos, deploy e validação em produção** (`6dbb817`)
 
 Entregue nesta etapa:
 
@@ -26,7 +54,7 @@ Validação desta etapa:
 
 Os dados e o banco sintéticos foram removidos.
 
-## Checkpoint anterior
+## Checkpoint anterior à etapa 8
 
 **Etapa 7 — Portal do funcionário, dashboards e E2E completo** (`14e19e2`)
 
@@ -137,6 +165,6 @@ Os recursos sintéticos do smoke e o banco temporário foram removidos. O banco 
 
 ## Estado final
 
-As etapas 1 a 8 da V1 estão implementadas, validadas e publicadas. O banco produtivo permanece sem tenant permanente; o primeiro tenant e seus usuários devem ser criados pelas requests protegidas do README quando as credenciais operacionais forem definidas.
+As etapas 1 a 8 da V1 e a integração canônica sob `/portal` estão implementadas, validadas e publicadas. O tenant permanente e os quatro usuários iniciais estão provisionados em produção.
 
-Os dados do smoke foram removidos. Nenhuma senha temporária ou segredo foi versionado.
+Os dados do smoke foram removidos. Permanecem apenas os dados permanentes solicitados e o conjunto sintético de homologação. Nenhuma senha temporária ou segredo foi versionado.
