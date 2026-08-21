@@ -47,7 +47,7 @@ vercel --prod
 
 Depois da publicação, valide `/portal/entrar`, execute o smoke E2E com um tenant descartável e confirme que o cleanup removeu banco e blobs sintéticos. Inspecione também o deployment e os logs da Vercel antes de considerar a etapa concluída.
 
-O alias técnico do projeto People deve redirecionar para a URL canônica quando o cabeçalho privado do gateway não estiver presente. O gateway é responsável por encaminhar o cabeçalho, corpo, query string e cookies sem armazenar respostas autenticadas em cache.
+O alias técnico do projeto People deve redirecionar páginas para a URL canônica quando o cabeçalho privado do gateway não estiver presente. Permanecem como exceções somente o cron com Bearer próprio e o callback POST assinado do Vercel Blob. O gateway é responsável por encaminhar o cabeçalho, corpo, query string e cookies sem armazenar respostas autenticadas em cache.
 
 ## Provisionamento inicial
 

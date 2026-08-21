@@ -3,6 +3,7 @@ import { PORTAL_BASE_PATH } from '@/lib/routing/base-path';
 
 const DEFAULT_CANONICAL_URL = 'https://www.synovadigital.com.br/portal';
 const CRON_PATH = '/api/internal/jobs/month-close-reminders';
+const BLOB_CALLBACK_PATH = '/api/documents/upload';
 
 function normalizedPath(pathname: string) {
   if (pathname === PORTAL_BASE_PATH) return '/';
@@ -21,7 +22,9 @@ export function proxy(request: NextRequest) {
   if (process.env.NODE_ENV !== 'production') return NextResponse.next();
 
   const pathname = normalizedPath(request.nextUrl.pathname);
-  if (pathname === CRON_PATH) return NextResponse.next();
+  if (pathname === CRON_PATH || (pathname === BLOB_CALLBACK_PATH && request.method === 'POST')) {
+    return NextResponse.next();
+  }
 
   const expected = process.env.PORTAL_PROXY_SECRET;
   const received = request.headers.get('x-synova-portal-proxy');
