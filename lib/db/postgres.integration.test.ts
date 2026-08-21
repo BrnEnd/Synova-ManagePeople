@@ -27,6 +27,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { PostgresClientRepository },
       { createWorkforceModule },
       { PostgresWorkforceRepository },
+      { createTimekeepingModule },
+      { PostgresTimekeepingRepository },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
@@ -44,6 +46,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       import('@/lib/clients/postgres-repository'),
       import('@/lib/workforce/module'),
       import('@/lib/workforce/postgres-repository'),
+      import('@/lib/timekeeping/module'),
+      import('@/lib/timekeeping/postgres-repository'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
@@ -202,6 +206,14 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       });
       await expect(workforce.detail(otherTenant.tenant.id, employee.id)).resolves.toBeNull();
 
+      const timekeeping = createTimekeepingModule({ repository: new PostgresTimekeepingRepository(), generateId: randomUUID, now: () => new Date() });
+      const competence = await timekeeping.open({ tenantId, userId: employeeUserResult.user.id, month: '2026-08' });
+      await timekeeping.saveEntry({ tenantId, userId: employeeUserResult.user.id, competenceId: competence.competence.id, workDate: '2026-08-03', minutes: 480, observation: 'Dia completo' });
+      await timekeeping.saveEntry({ tenantId, userId: employeeUserResult.user.id, competenceId: competence.competence.id, workDate: '2026-08-03', minutes: 450, observation: 'Ajustado' });
+      const secondEntry = await timekeeping.saveEntry({ tenantId, userId: employeeUserResult.user.id, competenceId: competence.competence.id, workDate: '2026-08-04', minutes: 120 });
+      expect(secondEntry).toMatchObject({ competence: { totalMinutes: 570 }, entries: [{ workDate: '2026-08-03', minutes: 450 }, { workDate: '2026-08-04', minutes: 120 }] });
+      await expect(timekeeping.get(otherTenant.tenant.id, employeeUserResult.user.id, competence.competence.id)).rejects.toThrow('Competência não encontrada.');
+
       const rawServiceKey = `service-key-${randomUUID()}-${randomUUID()}`;
       await provisioning.createServiceKey({
         tenantId,
@@ -280,6 +292,15 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         return { own: own[0], other: Number(other[0].total) };
       });
       expect(workforceVisibility).toEqual({ own: { contracts: '1', allocations: '1', financial: '2', commercial: '1' }, other: 0 });
+
+      const timeVisibility = await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        const own = await transaction<{ competencies: string; entries: string }[]>`select (select count(*) from competencies)::text as competencies, (select count(*) from time_entries)::text as entries`;
+        await transaction`select set_config('app.tenant_id', ${otherTenant.tenant.id}, true)`;
+        const other = await transaction<{ total: string }[]>`select ((select count(*) from competencies) + (select count(*) from time_entries))::text as total`;
+        return { own: own[0], other: Number(other[0].total) };
+      });
+      expect(timeVisibility).toEqual({ own: { competencies: '1', entries: '2' }, other: 0 });
 
       await expect(normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
@@ -391,6 +412,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         'allocation.created',
         'financial_condition.created',
         'commercial_condition.created',
+        'competence.created',
+        'time_entry.saved',
         'service_key.created',
         'employee.external_pre_registered',
         'user.logged_in',
@@ -401,6 +424,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
           await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
           await transaction`delete from login_attempts where tenant_id = ${tenantId}`;
           await transaction`delete from employee_notes where tenant_id = ${tenantId}`;
+          await transaction`delete from time_entries where tenant_id = ${tenantId}`;
+          await transaction`delete from competencies where tenant_id = ${tenantId}`;
           await transaction`delete from commercial_conditions where tenant_id = ${tenantId}`;
           await transaction`delete from financial_conditions where tenant_id = ${tenantId}`;
           await transaction`delete from allocations where tenant_id = ${tenantId}`;

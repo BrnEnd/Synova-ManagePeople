@@ -4,7 +4,29 @@ Este arquivo é o ponto de retomada operacional da V1 descrita no issue GitHub #
 
 ## Checkpoint atual
 
-**Etapa 3 — Contratos, alocações e condições** (`codex/complete-v1`, commit desta etapa)
+**Etapa 4 — Competências e apontamentos** (`codex/complete-v1`, commit desta etapa)
+
+Entregue nesta etapa:
+
+- competência mensal vinculada automaticamente ao funcionário, alocação, cliente e gestor;
+- apontamentos diários em minutos, com uma linha por data e observação opcional;
+- inclusão, edição pela mesma data e exclusão com total recalculado no banco;
+- bloqueio de alterações fora dos estados editáveis;
+- portal do funcionário com planilha responsiva, resumo e histórico mensal;
+- APIs autenticadas, auditoria, RLS e referências compostas de tenant.
+
+Validação desta etapa:
+
+- typecheck, lint e 54 testes unitários aprovados;
+- migrações completas em PostgreSQL vazio e integração com roles restritas aprovada;
+- isolamento RLS de competências e apontamentos;
+- smoke HTTP com sessão de funcionário, criação, edição, totalização, renderização e exclusão.
+
+Os dados e o banco sintéticos foram removidos.
+
+## Checkpoint anterior
+
+**Etapa 3 — Contratos, alocações e condições** (`898b5e1`)
 
 Entregue nesta etapa:
 
@@ -23,7 +45,7 @@ Validação desta etapa:
 
 Os dados e o banco sintéticos foram removidos.
 
-## Checkpoint anterior
+## Checkpoint anterior à etapa 3
 
 **Etapa 2 — Clientes** (`677daa7`)
 
@@ -73,14 +95,13 @@ Os recursos sintéticos do smoke e o banco temporário foram removidos. O banco 
 
 ## Próxima etapa
 
-**Etapa 4 — Competências e apontamentos**
+**Etapa 5 — Aprovação, ajustes, calendário e notificações**
 
-Criar competências mensais e lançamentos diários de horas pelo funcionário, com totais determinísticos e bloqueio de alterações fora dos estados permitidos.
+Implementar envio das horas, fila do gestor, aprovação ou solicitação de ajustes, histórico das transições e lembretes no último dia útil nacional.
 
 ## Etapas restantes
 
-1. Etapa 4 — Competências e apontamentos.
-2. Etapa 5 — Aprovação, ajustes, último dia útil e notificações.
-3. Etapa 6 — Previsão PDF, Nota Fiscal e pagamento.
-4. Etapa 7 — Portal do funcionário, dashboards e E2E completo.
-5. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.
+1. Etapa 5 — Aprovação, ajustes, último dia útil e notificações.
+2. Etapa 6 — Previsão PDF, Nota Fiscal e pagamento.
+3. Etapa 7 — Portal do funcionário, dashboards e E2E completo.
+4. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.

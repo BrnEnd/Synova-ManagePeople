@@ -32,6 +32,14 @@ export const documentOrigin = pgEnum('document_origin', ['manager', 'employee', 
 export const clientStatus = pgEnum('client_status', ['active', 'inactive']);
 export const contractStatus = pgEnum('contract_status', ['active', 'ended']);
 export const allocationStatus = pgEnum('allocation_status', ['active', 'ended']);
+export const competenceStatus = pgEnum('competence_status', [
+  'filling',
+  'awaiting_approval',
+  'adjustments_requested',
+  'awaiting_invoice',
+  'awaiting_payment',
+  'paid',
+]);
 
 export const tenants = pgTable('tenants', {
   id: uuid('id').primaryKey(),
@@ -280,6 +288,52 @@ export const commercialConditions = pgTable('commercial_conditions', {
   foreignKey({ columns: [table.tenantId, table.createdByUserId], foreignColumns: [users.tenantId, users.id], name: 'commercial_conditions_tenant_creator_fk' }),
   check('commercial_conditions_rate_positive_check', sql`${table.hourlyRateCents} > 0`),
   check('commercial_conditions_valid_period_check', sql`${table.effectiveTo} is null or ${table.effectiveTo} >= ${table.effectiveFrom}`),
+]);
+
+export const competencies = pgTable('competencies', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  employeeId: uuid('employee_id').notNull(),
+  allocationId: uuid('allocation_id').notNull(),
+  clientId: uuid('client_id').notNull(),
+  managerUserId: uuid('manager_user_id').notNull(),
+  referenceMonth: date('reference_month', { mode: 'string' }).notNull(),
+  status: competenceStatus('status').notNull().default('filling'),
+  totalMinutes: integer('total_minutes').notNull().default(0),
+  revision: integer('revision').notNull().default(1),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('competencies_tenant_id_id_unique').on(table.tenantId, table.id),
+  uniqueIndex('competencies_employee_month_unique').on(table.tenantId, table.employeeId, table.referenceMonth),
+  index('competencies_tenant_status_month_idx').on(table.tenantId, table.status, table.referenceMonth),
+  foreignKey({ columns: [table.tenantId, table.employeeId], foreignColumns: [employees.tenantId, employees.id], name: 'competencies_tenant_employee_fk' }),
+  foreignKey({ columns: [table.tenantId, table.allocationId], foreignColumns: [allocations.tenantId, allocations.id], name: 'competencies_tenant_allocation_fk' }),
+  foreignKey({ columns: [table.tenantId, table.clientId], foreignColumns: [clients.tenantId, clients.id], name: 'competencies_tenant_client_fk' }),
+  foreignKey({ columns: [table.tenantId, table.managerUserId], foreignColumns: [users.tenantId, users.id], name: 'competencies_tenant_manager_fk' }),
+  check('competencies_month_first_day_check', sql`extract(day from ${table.referenceMonth}) = 1`),
+  check('competencies_total_nonnegative_check', sql`${table.totalMinutes} >= 0`),
+]);
+
+export const timeEntries = pgTable('time_entries', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  competenceId: uuid('competence_id').notNull(),
+  employeeId: uuid('employee_id').notNull(),
+  allocationId: uuid('allocation_id').notNull(),
+  workDate: date('work_date', { mode: 'string' }).notNull(),
+  minutes: integer('minutes').notNull(),
+  observation: text('observation'),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('time_entries_tenant_id_id_unique').on(table.tenantId, table.id),
+  uniqueIndex('time_entries_competence_date_unique').on(table.tenantId, table.competenceId, table.workDate),
+  index('time_entries_tenant_employee_date_idx').on(table.tenantId, table.employeeId, table.workDate),
+  foreignKey({ columns: [table.tenantId, table.competenceId], foreignColumns: [competencies.tenantId, competencies.id], name: 'time_entries_tenant_competence_fk' }),
+  foreignKey({ columns: [table.tenantId, table.employeeId], foreignColumns: [employees.tenantId, employees.id], name: 'time_entries_tenant_employee_fk' }),
+  foreignKey({ columns: [table.tenantId, table.allocationId], foreignColumns: [allocations.tenantId, allocations.id], name: 'time_entries_tenant_allocation_fk' }),
+  check('time_entries_minutes_check', sql`${table.minutes} > 0 and ${table.minutes} <= 1440`),
 ]);
 
 export const serviceKeys = pgTable('service_keys', {

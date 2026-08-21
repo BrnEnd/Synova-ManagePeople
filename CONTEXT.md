@@ -65,3 +65,11 @@ _Evitar_: Condição comercial, salário sobrescrito
 **Condição comercial**:
 Valor-hora cobrado na Alocação, versionado separadamente do custo.
 _Evitar_: Condição financeira, pagamento do funcionário
+
+**Competência**:
+Unidade mensal independente que consolida os apontamentos de um Funcionário em uma Alocação e possui ciclo de vida próprio.
+_Evitar_: Mês sem estado, folha de pagamento
+
+**Apontamento de horas**:
+Linha diária da Competência, armazenada em minutos e acompanhada de observação opcional.
+_Evitar_: Total manual, condição financeira

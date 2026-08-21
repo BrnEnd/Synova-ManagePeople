@@ -168,3 +168,27 @@ curl -b synova-session.txt -X POST "$APP_URL/api/allocations/<ALLOCATION_ID>/end
 ```
 
 Cada nova condição cria uma vigência; ela não sobrescreve valores históricos.
+
+## Competências e apontamentos via CLI
+
+As rotas usam a sessão do próprio funcionário. A competência é aberta automaticamente com a alocação válida no mês, e as durações são enviadas em minutos.
+
+```bash
+curl -c synova-employee-session.txt -X POST "$APP_URL/api/auth/session" \
+  -H "Content-Type: application/json" \
+  --data '{"tenantSlug":"<TENANT_SLUG>","email":"<FUNCIONARIO_EMAIL>","password":"<FUNCIONARIO_SENHA>"}'
+
+curl -b synova-employee-session.txt -X POST "$APP_URL/api/portal/competencies" \
+  -H "Content-Type: application/json" --data '{"month":"2026-08"}'
+
+curl -b synova-employee-session.txt -X POST "$APP_URL/api/portal/competencies/<COMPETENCE_ID>/entries" \
+  -H "Content-Type: application/json" \
+  --data '{"workDate":"2026-08-03","minutes":480,"observation":"Atividades do dia"}'
+
+curl -b synova-employee-session.txt "$APP_URL/api/portal/competencies/<COMPETENCE_ID>"
+
+curl -b synova-employee-session.txt -X DELETE \
+  "$APP_URL/api/portal/competencies/<COMPETENCE_ID>/entries/<ENTRY_ID>"
+```
+
+Salvar novamente a mesma data atualiza a linha existente. O cookie de sessão deve ser eliminado após o uso.
