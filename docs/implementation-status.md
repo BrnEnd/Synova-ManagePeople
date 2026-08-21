@@ -4,7 +4,29 @@ Este arquivo é o ponto de retomada operacional da V1 descrita no issue GitHub #
 
 ## Checkpoint atual
 
-**Portal canônico e provisionamento permanente** (`codex/production-portal-record`, commit desta etapa)
+**Home objetiva e funções em São Paulo — issues #2 e #3** (`dc3cc18`)
+
+Entregue neste checkpoint:
+
+- home de login com a chamada `Bem-vindo à Synova.` e sem os dois textos explicativos anteriores;
+- smoke HTTP público reutilizável para verificar a nova chamada, os identificadores institucionais preservados e a ausência dos textos removidos;
+- região das Vercel Functions do People fixada em `gru1`, junto ao gateway em `gru1` e ao Neon em `sa-east-1`;
+- deployment produtivo `dpl_EtqPmcBF5ko5d7jHZeLpfuyguNXW` em estado `Ready`.
+
+Validação deste checkpoint:
+
+- typecheck, lint, 66 testes unitários, build e preview local aprovados;
+- resumo do deployment confirmou as rotas do People em `gru1`;
+- smoke público aprovado em `https://www.synovadigital.com.br/portal/entrar`;
+- URL técnica continuou respondendo HTTP 307 para a URL canônica;
+- E2E produtivo descartável aprovado para gestor e funcionário, incluindo APIs, banco, Blob privado, PDF, NF, pagamento e cleanup;
+- cron respondeu HTTP 401 sem segredo e HTTP 200 com segredo;
+- após aquecimento, cinco acessos à home responderam em 123–134 ms, exceto a primeira amostra de 393 ms; uma autenticação inválida respondeu em 650 ms;
+- cold starts continuam variáveis e não constituem garantia de latência absoluta.
+
+## Checkpoint anterior
+
+**Portal canônico e provisionamento permanente** (`6f94ab4`)
 
 Entregue neste checkpoint:
 
