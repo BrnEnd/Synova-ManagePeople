@@ -138,3 +138,33 @@ curl -b synova-session.txt -X POST "$APP_URL/api/clients" \
 ```
 
 O arquivo de cookies contém uma sessão autenticada e deve ser eliminado ao terminar a operação.
+
+## Contratos, alocações e condições via CLI
+
+As requests abaixo reutilizam a sessão de gestor criada na seção anterior. Valores monetários são enviados em centavos.
+
+```bash
+curl -b synova-session.txt -X POST "$APP_URL/api/employees/<EMPLOYEE_ID>/contracts" \
+  -H "Content-Type: application/json" \
+  --data '{"contractType":"Prestação de serviços","startDate":"2026-08-01","endDate":null,"documentId":null,"observations":null}'
+
+curl -b synova-session.txt -X POST "$APP_URL/api/employees/<EMPLOYEE_ID>/financial-conditions" \
+  -H "Content-Type: application/json" \
+  --data '{"hourlyRateCents":12500,"effectiveFrom":"2026-08-01","observations":null}'
+
+curl -b synova-session.txt -X POST "$APP_URL/api/employees/<EMPLOYEE_ID>/allocations" \
+  -H "Content-Type: application/json" \
+  --data '{"clientId":"<CLIENT_ID>","managerUserId":"<MANAGER_USER_ID>","roleTitle":"Consultor","startDate":"2026-08-01","endDate":null,"observations":null}'
+
+curl -b synova-session.txt -X POST "$APP_URL/api/allocations/<ALLOCATION_ID>/commercial-conditions" \
+  -H "Content-Type: application/json" \
+  --data '{"hourlyRateCents":22000,"effectiveFrom":"2026-08-01","observations":null}'
+
+curl -b synova-session.txt -X POST "$APP_URL/api/contracts/<CONTRACT_ID>/end" \
+  -H "Content-Type: application/json" --data '{"endDate":"2026-12-31"}'
+
+curl -b synova-session.txt -X POST "$APP_URL/api/allocations/<ALLOCATION_ID>/end" \
+  -H "Content-Type: application/json" --data '{"endDate":"2026-12-31"}'
+```
+
+Cada nova condição cria uma vigência; ela não sobrescreve valores históricos.

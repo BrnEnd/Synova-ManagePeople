@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   date,
   foreignKey,
   index,
@@ -12,6 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const tenantStatus = pgEnum('tenant_status', ['active', 'inactive']);
 export const userRole = pgEnum('user_role', ['manager', 'employee']);
@@ -28,6 +30,8 @@ export const documentType = pgEnum('document_type', [
 ]);
 export const documentOrigin = pgEnum('document_origin', ['manager', 'employee', 'integration', 'generated']);
 export const clientStatus = pgEnum('client_status', ['active', 'inactive']);
+export const contractStatus = pgEnum('contract_status', ['active', 'ended']);
+export const allocationStatus = pgEnum('allocation_status', ['active', 'ended']);
 
 export const tenants = pgTable('tenants', {
   id: uuid('id').primaryKey(),
@@ -112,6 +116,7 @@ export const documents = pgTable('documents', {
   archivedAt: timestamp('archived_at', { withTimezone: true, mode: 'date' }),
 }, (table) => [
   uniqueIndex('documents_pathname_unique').on(table.pathname),
+  uniqueIndex('documents_tenant_id_id_unique').on(table.tenantId, table.id),
   index('documents_tenant_employee_created_idx').on(table.tenantId, table.employeeId, table.createdAt),
   foreignKey({
     columns: [table.tenantId, table.employeeId],
@@ -174,6 +179,107 @@ export const clients = pgTable('clients', {
   uniqueIndex('clients_tenant_tax_id_unique').on(table.tenantId, table.taxId),
   uniqueIndex('clients_tenant_id_id_unique').on(table.tenantId, table.id),
   index('clients_tenant_status_name_idx').on(table.tenantId, table.status, table.name),
+]);
+
+export const contracts = pgTable('contracts', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  employeeId: uuid('employee_id').notNull(),
+  documentId: uuid('document_id'),
+  contractType: text('contract_type').notNull(),
+  startDate: date('start_date', { mode: 'string' }).notNull(),
+  endDate: date('end_date', { mode: 'string' }),
+  status: contractStatus('status').notNull().default('active'),
+  observations: text('observations'),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
+}, (table) => [
+  uniqueIndex('contracts_tenant_id_id_unique').on(table.tenantId, table.id),
+  index('contracts_tenant_employee_start_idx').on(table.tenantId, table.employeeId, table.startDate),
+  foreignKey({
+    columns: [table.tenantId, table.employeeId],
+    foreignColumns: [employees.tenantId, employees.id],
+    name: 'contracts_tenant_employee_fk',
+  }),
+  foreignKey({
+    columns: [table.tenantId, table.documentId],
+    foreignColumns: [documents.tenantId, documents.id],
+    name: 'contracts_tenant_document_fk',
+  }),
+  foreignKey({
+    columns: [table.tenantId, table.createdByUserId],
+    foreignColumns: [users.tenantId, users.id],
+    name: 'contracts_tenant_creator_fk',
+  }),
+  check('contracts_valid_period_check', sql`${table.endDate} is null or ${table.endDate} >= ${table.startDate}`),
+]);
+
+export const allocations = pgTable('allocations', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  employeeId: uuid('employee_id').notNull(),
+  clientId: uuid('client_id').notNull(),
+  managerUserId: uuid('manager_user_id').notNull(),
+  roleTitle: text('role_title'),
+  startDate: date('start_date', { mode: 'string' }).notNull(),
+  endDate: date('end_date', { mode: 'string' }),
+  status: allocationStatus('status').notNull().default('active'),
+  observations: text('observations'),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
+}, (table) => [
+  uniqueIndex('allocations_tenant_id_id_unique').on(table.tenantId, table.id),
+  index('allocations_tenant_employee_start_idx').on(table.tenantId, table.employeeId, table.startDate),
+  index('allocations_tenant_client_status_idx').on(table.tenantId, table.clientId, table.status),
+  foreignKey({ columns: [table.tenantId, table.employeeId], foreignColumns: [employees.tenantId, employees.id], name: 'allocations_tenant_employee_fk' }),
+  foreignKey({ columns: [table.tenantId, table.clientId], foreignColumns: [clients.tenantId, clients.id], name: 'allocations_tenant_client_fk' }),
+  foreignKey({ columns: [table.tenantId, table.managerUserId], foreignColumns: [users.tenantId, users.id], name: 'allocations_tenant_manager_fk' }),
+  foreignKey({ columns: [table.tenantId, table.createdByUserId], foreignColumns: [users.tenantId, users.id], name: 'allocations_tenant_creator_fk' }),
+  check('allocations_valid_period_check', sql`${table.endDate} is null or ${table.endDate} >= ${table.startDate}`),
+]);
+
+export const financialConditions = pgTable('financial_conditions', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  employeeId: uuid('employee_id').notNull(),
+  hourlyRateCents: integer('hourly_rate_cents').notNull(),
+  effectiveFrom: date('effective_from', { mode: 'string' }).notNull(),
+  effectiveTo: date('effective_to', { mode: 'string' }),
+  observations: text('observations'),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('financial_conditions_tenant_id_id_unique').on(table.tenantId, table.id),
+  uniqueIndex('financial_conditions_version_unique').on(table.tenantId, table.employeeId, table.effectiveFrom),
+  uniqueIndex('financial_conditions_open_unique').on(table.tenantId, table.employeeId).where(sql`${table.effectiveTo} is null`),
+  index('financial_conditions_tenant_employee_effective_idx').on(table.tenantId, table.employeeId, table.effectiveFrom),
+  foreignKey({ columns: [table.tenantId, table.employeeId], foreignColumns: [employees.tenantId, employees.id], name: 'financial_conditions_tenant_employee_fk' }),
+  foreignKey({ columns: [table.tenantId, table.createdByUserId], foreignColumns: [users.tenantId, users.id], name: 'financial_conditions_tenant_creator_fk' }),
+  check('financial_conditions_rate_positive_check', sql`${table.hourlyRateCents} > 0`),
+  check('financial_conditions_valid_period_check', sql`${table.effectiveTo} is null or ${table.effectiveTo} >= ${table.effectiveFrom}`),
+]);
+
+export const commercialConditions = pgTable('commercial_conditions', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  allocationId: uuid('allocation_id').notNull(),
+  hourlyRateCents: integer('hourly_rate_cents').notNull(),
+  effectiveFrom: date('effective_from', { mode: 'string' }).notNull(),
+  effectiveTo: date('effective_to', { mode: 'string' }),
+  observations: text('observations'),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('commercial_conditions_tenant_id_id_unique').on(table.tenantId, table.id),
+  uniqueIndex('commercial_conditions_version_unique').on(table.tenantId, table.allocationId, table.effectiveFrom),
+  uniqueIndex('commercial_conditions_open_unique').on(table.tenantId, table.allocationId).where(sql`${table.effectiveTo} is null`),
+  index('commercial_conditions_tenant_allocation_effective_idx').on(table.tenantId, table.allocationId, table.effectiveFrom),
+  foreignKey({ columns: [table.tenantId, table.allocationId], foreignColumns: [allocations.tenantId, allocations.id], name: 'commercial_conditions_tenant_allocation_fk' }),
+  foreignKey({ columns: [table.tenantId, table.createdByUserId], foreignColumns: [users.tenantId, users.id], name: 'commercial_conditions_tenant_creator_fk' }),
+  check('commercial_conditions_rate_positive_check', sql`${table.hourlyRateCents} > 0`),
+  check('commercial_conditions_valid_period_check', sql`${table.effectiveTo} is null or ${table.effectiveTo} >= ${table.effectiveFrom}`),
 ]);
 
 export const serviceKeys = pgTable('service_keys', {

@@ -25,6 +25,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { PostgresDocumentRepository },
       { createClientsModule },
       { PostgresClientRepository },
+      { createWorkforceModule },
+      { PostgresWorkforceRepository },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
@@ -40,6 +42,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       import('@/lib/documents/postgres-repository'),
       import('@/lib/clients/module'),
       import('@/lib/clients/postgres-repository'),
+      import('@/lib/workforce/module'),
+      import('@/lib/workforce/postgres-repository'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
@@ -132,6 +136,11 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         size: 1024,
       });
       expect(employeeDocument.replayed).toBe(false);
+      const contractDocument = await documentsModule.recordUpload({
+        tenantId, employeeId: employee.id, actorUserId: userResult.user.id, type: 'contract', origin: 'manager',
+        originalName: 'contrato.pdf', pathname: `tenants/${tenantId}/employees/${employee.id}/${randomUUID()}.pdf`,
+        mimeType: 'application/pdf', size: 2048,
+      });
       await expect(employeesModule.update({
         tenantId,
         employeeId: employee.id,
@@ -169,6 +178,29 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         },
       });
       await expect(clientsModule.get(otherTenant.tenant.id, client.id)).resolves.toBeNull();
+
+      const workforce = createWorkforceModule({ repository: new PostgresWorkforceRepository(), generateId: randomUUID, now: () => new Date() });
+      const contract = await workforce.createContract({
+        tenantId, employeeId: employee.id, actorUserId: userResult.user.id, documentId: contractDocument.document.id,
+        contractType: 'Prestação de serviços', startDate: '2026-08-01',
+      });
+      const allocation = await workforce.createAllocation({
+        tenantId, employeeId: employee.id, actorUserId: userResult.user.id, clientId: client.id,
+        managerUserId: userResult.user.id, roleTitle: 'Consultora', startDate: '2026-08-01',
+      });
+      await workforce.addFinancialCondition({ tenantId, employeeId: employee.id, actorUserId: userResult.user.id, hourlyRateCents: 10_000, effectiveFrom: '2026-08-01' });
+      await workforce.addFinancialCondition({ tenantId, employeeId: employee.id, actorUserId: userResult.user.id, hourlyRateCents: 12_000, effectiveFrom: '2026-09-01' });
+      await workforce.addCommercialCondition({ tenantId, allocationId: allocation.id, actorUserId: userResult.user.id, hourlyRateCents: 20_000, effectiveFrom: '2026-08-01' });
+      const workforceDetail = await workforce.detail(tenantId, employee.id);
+      expect(workforceDetail).toMatchObject({
+        contracts: [{ id: contract.id }],
+        allocations: [{ id: allocation.id, clientName: 'Cliente de integração', managerName: 'Gestão de integração' }],
+        financialConditions: [
+          { hourlyRateCents: 12_000, effectiveFrom: '2026-09-01', effectiveTo: null },
+          { hourlyRateCents: 10_000, effectiveFrom: '2026-08-01', effectiveTo: '2026-08-31' },
+        ],
+      });
+      await expect(workforce.detail(otherTenant.tenant.id, employee.id)).resolves.toBeNull();
 
       const rawServiceKey = `service-key-${randomUUID()}-${randomUUID()}`;
       await provisioning.createServiceKey({
@@ -221,7 +253,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         const other = await transaction<{ count: string }[]>`select count(*)::text as count from documents`;
         return { own: Number(own[0].count), other: Number(other[0].count) };
       });
-      expect(documentVisibility).toEqual({ own: 1, other: 0 });
+      expect(documentVisibility).toEqual({ own: 2, other: 0 });
 
       const clientVisibility = await normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
@@ -231,6 +263,23 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         return { own: Number(own[0].count), other: Number(other[0].count) };
       });
       expect(clientVisibility).toEqual({ own: 1, other: 0 });
+
+      const workforceVisibility = await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        const own = await transaction<{ contracts: string; allocations: string; financial: string; commercial: string }[]>`
+          select (select count(*) from contracts)::text as contracts,
+                 (select count(*) from allocations)::text as allocations,
+                 (select count(*) from financial_conditions)::text as financial,
+                 (select count(*) from commercial_conditions)::text as commercial
+        `;
+        await transaction`select set_config('app.tenant_id', ${otherTenant.tenant.id}, true)`;
+        const other = await transaction<{ total: string }[]>`
+          select ((select count(*) from contracts) + (select count(*) from allocations) +
+                  (select count(*) from financial_conditions) + (select count(*) from commercial_conditions))::text as total
+        `;
+        return { own: own[0], other: Number(other[0].total) };
+      });
+      expect(workforceVisibility).toEqual({ own: { contracts: '1', allocations: '1', financial: '2', commercial: '1' }, other: 0 });
 
       await expect(normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
@@ -338,6 +387,10 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         'employee.updated',
         'employee.note_added',
         'client.created',
+        'contract.created',
+        'allocation.created',
+        'financial_condition.created',
+        'commercial_condition.created',
         'service_key.created',
         'employee.external_pre_registered',
         'user.logged_in',
@@ -348,6 +401,10 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
           await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
           await transaction`delete from login_attempts where tenant_id = ${tenantId}`;
           await transaction`delete from employee_notes where tenant_id = ${tenantId}`;
+          await transaction`delete from commercial_conditions where tenant_id = ${tenantId}`;
+          await transaction`delete from financial_conditions where tenant_id = ${tenantId}`;
+          await transaction`delete from allocations where tenant_id = ${tenantId}`;
+          await transaction`delete from contracts where tenant_id = ${tenantId}`;
           await transaction`delete from documents where tenant_id = ${tenantId}`;
           await transaction`delete from clients where tenant_id = ${tenantId}`;
           await transaction`delete from external_hiring_records where tenant_id = ${tenantId}`;

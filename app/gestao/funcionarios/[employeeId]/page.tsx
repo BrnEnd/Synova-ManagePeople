@@ -1,10 +1,12 @@
 import { notFound, redirect } from 'next/navigation';
 import { EmployeeDetail } from '@/components/employees/employee-detail';
+import { WorkforcePanel } from '@/components/employees/workforce-panel';
 import { ManagementHeader } from '@/components/management/management-header';
 import { getDocumentsModule } from '@/lib/documents/server';
 import { isBlobStorageConfigured } from '@/lib/documents/storage';
 import { getEmployeesModule } from '@/lib/employees/server';
 import { getCurrentIdentity } from '@/lib/identity/server';
+import { getWorkforceModule } from '@/lib/workforce/server';
 
 export default async function EmployeeDetailPage({
   params,
@@ -15,11 +17,12 @@ export default async function EmployeeDetailPage({
   if (identity.role !== 'manager') redirect('/portal');
 
   const { employeeId } = await params;
-  const [detail, documents] = await Promise.all([
+  const [detail, documents, workforce] = await Promise.all([
     getEmployeesModule().detail(identity.tenantId, employeeId),
     getDocumentsModule().listForEmployee(identity.tenantId, employeeId),
+    getWorkforceModule().detail(identity.tenantId, employeeId),
   ]);
-  if (!detail) notFound();
+  if (!detail || !workforce) notFound();
 
   return (
     <main className="min-h-screen">
@@ -33,6 +36,13 @@ export default async function EmployeeDetailPage({
           documents: documents.map((document) => ({ ...document, createdAt: document.createdAt.toISOString() })),
         }}
       />
+      <div className="mx-auto max-w-7xl px-5 pb-12 md:px-10">
+        <WorkforcePanel
+          contractDocuments={documents.filter((document) => document.type === 'contract').map(({ id, originalName }) => ({ id, originalName }))}
+          data={workforce}
+          employeeId={employeeId}
+        />
+      </div>
     </main>
   );
 }

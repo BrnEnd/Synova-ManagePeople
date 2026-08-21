@@ -49,3 +49,19 @@ _Evitar_: Campo de observação sobrescrito
 **Cliente**:
 Organização atendida pela Synova e referenciada por Alocações. Possui identidade, contatos e situação próprios; não é texto livre no Funcionário.
 _Evitar_: Projeto, alocação, tenant
+
+**Contrato**:
+Vínculo documental e temporal do Funcionário, encerrado sem exclusão do histórico.
+_Evitar_: Condição financeira, documento avulso
+
+**Alocação**:
+Relação temporal entre Funcionário, Cliente e Gestor responsável.
+_Evitar_: Cliente, contrato
+
+**Condição financeira**:
+Valor-hora de custo do Funcionário, versionado por vigência.
+_Evitar_: Condição comercial, salário sobrescrito
+
+**Condição comercial**:
+Valor-hora cobrado na Alocação, versionado separadamente do custo.
+_Evitar_: Condição financeira, pagamento do funcionário

@@ -71,6 +71,7 @@ const pendingLabels: Record<string, string> = {
 const documentLabels: Record<string, string> = {
   identification: 'Identificação',
   address_proof: 'Comprovante de endereço',
+  contract: 'Contrato',
   other: 'Outro documento',
 };
 
@@ -278,7 +279,7 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
           <section className="rounded-3xl border border-white/10 bg-zinc-900/70 p-5 sm:p-7">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-500">Arquivos</p><h2 className="mt-2 text-xl font-black text-white">Documentos</h2>
             <form className="mt-5 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end" onSubmit={sendDocument}>
-              <label className="block text-sm font-bold text-zinc-300">Tipo<select className="field mt-2" name="type"><option value="identification">Identificação</option><option value="address_proof">Comprovante de endereço</option><option value="other">Outro</option></select></label>
+              <label className="block text-sm font-bold text-zinc-300">Tipo<select className="field mt-2" name="type"><option value="identification">Identificação</option><option value="address_proof">Comprovante de endereço</option><option value="contract">Contrato</option><option value="other">Outro</option></select></label>
               <label className="block text-sm font-bold text-zinc-300">PDF ou imagem<input accept="application/pdf,image/jpeg,image/png,image/webp" className="field mt-2 file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-bold file:text-orange-300" name="file" required type="file" /></label>
               <button className="pressable rounded-full border border-orange-400/30 px-5 py-3 font-black text-orange-300 disabled:cursor-wait disabled:opacity-60" disabled={busy !== null} type="submit">{busy === 'document' ? (progress ? `${progress}%` : 'Enviando…') : 'Enviar'}</button>
             </form>
