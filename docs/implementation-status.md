@@ -4,28 +4,35 @@ Este arquivo é o ponto de retomada operacional da V1 descrita no issue GitHub #
 
 ## Checkpoint atual
 
-**Etapa 7 — Portal do funcionário, dashboards e E2E completo** (`codex/complete-v1`, commit desta etapa)
+**Etapa 8 — Infraestrutura, segredos, deploy e validação em produção** (`codex/complete-v1`, commit desta etapa)
 
 Entregue nesta etapa:
 
-- dashboard mensal com os nove indicadores operacionais e financeiros da especificação;
-- filtros navegáveis para funcionários, aprovações, Nota Fiscal e pagamentos;
-- previsão de custo pelo valor congelado e faturamento pela condição comercial vigente;
-- histórico financeiro do funcionário com cliente, horas, valor-hora, total, status e data;
-- downloads históricos de previsão, Nota Fiscal e comprovante;
-- smoke E2E HTTP reutilizável cobrindo o fluxo integral, com limpeza automática dos dados sintéticos.
+- projeto Vercel `synova-manage-people` publicado em `https://synova-manage-people.vercel.app`;
+- Neon PostgreSQL isolado e Vercel Blob privado em `gru1`;
+- migrações aplicadas fora do runtime com credencial proprietária;
+- runtime separado entre `synova_app_prod` e `synova_provisioner`, ambas sem superusuário e sem `BYPASSRLS`;
+- segredos aleatórios protegidos nos ambientes Vercel e cron diário configurado;
+- runbook de migração, rotação, publicação, validação e provisionamento inicial.
 
 Validação desta etapa:
 
-- typecheck, lint e 65 testes unitários aprovados;
-- integração PostgreSQL com números exatos de custo e faturamento aprovada;
-- E2E HTTP do provisionamento ao pagamento aprovado;
-- renderização autenticada do dashboard e do histórico financeiro validada;
-- limpeza confirmada do tenant, banco e arquivos sintéticos.
+- deployment produtivo `dpl_3bLqTFWDqsFqasvWAKTtc6A3aHFh` em estado `Ready`;
+- integração completa no Neon produtivo aprovada com roles restritas;
+- E2E HTTP público aprovado do provisionamento ao pagamento com Blob privado;
+- `/entrar` respondeu HTTP 200 com HTTPS/HSTS;
+- 19 tabelas com RLS habilitada e forçada; 0 tenants e 0 blobs sintéticos após cleanup;
+- nenhum erro HTTP 500 nos logs do deployment após o smoke.
 
 Os dados e o banco sintéticos foram removidos.
 
 ## Checkpoint anterior
+
+**Etapa 7 — Portal do funcionário, dashboards e E2E completo** (`14e19e2`)
+
+Entregou dashboard gerencial, histórico financeiro do funcionário e E2E integral reutilizável.
+
+## Checkpoint anterior à etapa 7
 
 **Etapa 6 — Previsão PDF, Nota Fiscal e pagamento** (`29239fb`)
 
@@ -128,12 +135,8 @@ Validação executada:
 
 Os recursos sintéticos do smoke e o banco temporário foram removidos. O banco local de desenvolvimento e o usuário `gestor.teste@synova.local` foram preservados.
 
-## Próxima etapa
+## Estado final
 
-**Etapa 8 — Infraestrutura, segredos, deploy e validação em produção**
+As etapas 1 a 8 da V1 estão implementadas, validadas e publicadas. O banco produtivo permanece sem tenant permanente; o primeiro tenant e seus usuários devem ser criados pelas requests protegidas do README quando as credenciais operacionais forem definidas.
 
-Configurar a infraestrutura produtiva, aplicar migrações com roles restritas, publicar e validar o fluxo crítico no domínio final.
-
-## Etapas restantes
-
-1. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.
+Os dados do smoke foram removidos. Nenhuma senha temporária ou segredo foi versionado.

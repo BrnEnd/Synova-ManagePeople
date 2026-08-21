@@ -9,7 +9,7 @@
 
 ## Separação de credenciais
 
-Migrações usam somente a URL proprietária fora do runtime. A aplicação recebe `DATABASE_URL` com a role `synova_app_prod`, sem superusuário e sem `BYPASSRLS`. O provisionamento recebe `PROVISIONING_DATABASE_URL` com `synova_provisioner_prod`, limitada a tenants, usuários, auditoria, idempotência e chaves de serviço.
+Migrações usam somente a URL proprietária fora do runtime. A aplicação recebe `DATABASE_URL` com a role `synova_app_prod`, sem superusuário e sem `BYPASSRLS`. O provisionamento recebe `PROVISIONING_DATABASE_URL` com a role nominal `synova_provisioner`, limitada a tenants, usuários, auditoria, idempotência e chaves de serviço. Esse nome faz parte das políticas RLS versionadas.
 
 Nunca configure `DATABASE_URL_UNPOOLED`, `POSTGRES_URL` ou outra credencial proprietária como `DATABASE_URL` da aplicação.
 

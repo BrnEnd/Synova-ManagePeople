@@ -517,5 +517,5 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       }
       await Promise.all([normal.end(), privileged.end()]);
     }
-  }, 30_000);
+  }, 120_000);
 });

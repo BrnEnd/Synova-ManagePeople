@@ -2,6 +2,8 @@
 
 Portal multi-tenant para gestão de funcionários, competências, documentos e pagamentos da Synova.
 
+Produção: [https://synova-manage-people.vercel.app](https://synova-manage-people.vercel.app)
+
 O procedimento de migração, segredos, publicação e verificação produtiva está em [`docs/production-runbook.md`](docs/production-runbook.md).
 
 ## Desenvolvimento local
