@@ -4,6 +4,7 @@ import { upload } from '@vercel/blob/client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { portalPath } from '@/lib/routing/base-path';
 
 type EmployeeDetailData = {
   employee: {
@@ -135,7 +136,7 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
       } : null,
     };
     try {
-      const response = await fetch(`/api/employees/${employee.id}`, {
+      const response = await fetch(portalPath(`/api/employees/${employee.id}`), {
         method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
       });
       const body = await response.json() as { error?: string };
@@ -173,12 +174,12 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
         const pathname = `tenants/${employee.tenantId}/employees/${employee.id}/${crypto.randomUUID()}-${safeName(file.name)}`;
         const blob = await upload(pathname, file, {
           access: 'private',
-          handleUploadUrl: '/api/documents/upload',
+          handleUploadUrl: portalPath('/api/documents/upload'),
           multipart: file.size > 5 * 1024 * 1024,
           clientPayload: JSON.stringify({ employeeId: employee.id, type, originalName: file.name }),
           onUploadProgress: ({ percentage }) => setProgress(Math.round(percentage)),
         });
-        const completion = await fetch('/api/documents/complete', {
+        const completion = await fetch(portalPath('/api/documents/complete'), {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ employeeId: employee.id, type, originalName: file.name, pathname: blob.pathname }),
@@ -186,7 +187,7 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
         const body = await completion.json() as { error?: string };
         if (!completion.ok) throw new Error(body.error || 'Não foi possível concluir o documento.');
       } else {
-        const response = await fetch(`/api/employees/${employee.id}/documents`, { method: 'POST', body: form });
+        const response = await fetch(portalPath(`/api/employees/${employee.id}/documents`), { method: 'POST', body: form });
         const body = await response.json() as { error?: string };
         if (!response.ok) throw new Error(body.error || 'Não foi possível enviar o documento.');
       }
@@ -208,7 +209,7 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
     const formElement = event.currentTarget;
     const content = String(new FormData(formElement).get('content') || '');
     try {
-      const response = await fetch(`/api/employees/${employee.id}/notes`, {
+      const response = await fetch(portalPath(`/api/employees/${employee.id}/notes`), {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ content }),
       });
       const body = await response.json() as { error?: string };
@@ -288,7 +289,7 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
               {detail.documents.length === 0 ? <li className="py-5 text-sm text-zinc-500">Nenhum documento recebido.</li> : detail.documents.map((document) => (
                 <li className="flex flex-wrap items-center justify-between gap-3 py-4" key={document.id}>
                   <div><p className="font-bold text-white">{document.originalName}</p><p className="mt-1 text-xs text-zinc-500">{documentLabels[document.type] || document.type} · {(document.size / 1024 / 1024).toFixed(2)} MB · {new Intl.DateTimeFormat('pt-BR').format(new Date(document.createdAt))}</p></div>
-                  <a className="pressable rounded-full border border-white/10 px-4 py-2 text-sm font-bold text-zinc-300" href={`/api/documents/${document.id}/download`}>Baixar</a>
+                  <a className="pressable rounded-full border border-white/10 px-4 py-2 text-sm font-bold text-zinc-300" href={portalPath(`/api/documents/${document.id}/download`)}>Baixar</a>
                 </li>
               ))}
             </ul>

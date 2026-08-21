@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent, type ReactNode } from 'react';
+import { portalPath } from '@/lib/routing/base-path';
 
 type Condition = { id: string; hourlyRateCents: number; effectiveFrom: string; effectiveTo: string | null; observations: string | null };
 export type WorkforcePanelData = {
@@ -27,7 +28,7 @@ export function WorkforcePanel({ employeeId, data, contractDocuments }: {
     event.preventDefault(); setBusy(key); setFeedback(null);
     const formElement = event.currentTarget;
     try {
-      const response = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload(new FormData(formElement))) });
+      const response = await fetch(portalPath(endpoint), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload(new FormData(formElement))) });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || 'Não foi possível concluir a operação.');
       formElement.reset(); setFeedback({ type: 'success', text: success }); router.refresh();

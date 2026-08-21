@@ -3,10 +3,10 @@
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { identityDestination } from '@/lib/identity/destination';
+import { portalPath } from '@/lib/routing/base-path';
 
 export function LoginForm() {
   const router = useRouter();
-  const [tenantSlug, setTenantSlug] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -17,10 +17,10 @@ export function LoginForm() {
     setBusy(true);
     setError('');
     try {
-      const response = await fetch('/api/auth/session', {
+      const response = await fetch(portalPath('/api/auth/session'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ tenantSlug, email, password }),
+        body: JSON.stringify({ email, password }),
       });
       const body = await response.json() as {
         error?: string;
@@ -41,16 +41,12 @@ export function LoginForm() {
     <div className="rounded-3xl border border-white/10 bg-zinc-900/80 p-6 shadow-2xl shadow-black/30 backdrop-blur sm:p-8">
       <p className="text-xs font-black uppercase tracking-[0.2em] text-orange-400">Área restrita</p>
       <h2 className="mt-3 text-3xl font-black tracking-[-0.03em] text-white">Boas-vindas</h2>
-      <p className="mt-2 text-zinc-400">Entre com os dados provisionados para sua organização.</p>
+      <p className="mt-2 text-zinc-400">Entre com seu e-mail e senha da Synova.</p>
 
       <form className="mt-8 space-y-5" onSubmit={submit}>
         <label className="block text-sm font-bold text-zinc-200">
-          Organização
-          <input className="field mt-2" value={tenantSlug} onChange={(event) => setTenantSlug(event.target.value)} autoFocus autoComplete="organization" placeholder="synova" required />
-        </label>
-        <label className="block text-sm font-bold text-zinc-200">
           E-mail
-          <input className="field mt-2" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" placeholder="voce@synova.com" required />
+          <input className="field mt-2" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoFocus autoComplete="username" placeholder="voce@synovadigital.com.br" required />
         </label>
         <label className="block text-sm font-bold text-zinc-200">
           Senha

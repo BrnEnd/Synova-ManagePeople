@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { portalPath } from '@/lib/routing/base-path';
 
 export function PasswordForm({ destination, displayName }: { destination: string; displayName: string }) {
   const router = useRouter();
@@ -20,7 +21,7 @@ export function PasswordForm({ destination, displayName }: { destination: string
     }
     setBusy(true);
     try {
-      const response = await fetch('/api/auth/password', {
+      const response = await fetch(portalPath('/api/auth/password'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ currentPassword, newPassword }),

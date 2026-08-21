@@ -8,7 +8,7 @@ export default async function EmployeesPage({ searchParams }: { searchParams: Pr
   const identity = await getCurrentIdentity();
   if (!identity) redirect('/entrar');
   if (identity.mustChangePassword) redirect('/alterar-senha');
-  if (identity.role !== 'manager') redirect('/portal');
+  if (identity.role !== 'manager') redirect('/funcionario');
 
   const employees = await getEmployeesModule().list(identity.tenantId);
   const filter = (await searchParams).filter;

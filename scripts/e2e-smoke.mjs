@@ -5,6 +5,7 @@ import { del } from '@vercel/blob';
 import { upload } from '@vercel/blob/client';
 
 const appUrl = process.env.APP_URL || 'http://localhost:3000';
+const portalPath = (path) => `/portal${path === '/' ? '' : path}`;
 const required = ['PROVISIONING_SECRET', 'DATABASE_URL', 'PROVISIONING_DATABASE_URL'];
 for (const name of required) if (!process.env[name]) throw new Error(`${name} não configurada.`);
 
@@ -13,7 +14,7 @@ class BrowserSession {
   async request(path, init = {}) {
     const headers = new Headers(init.headers);
     if (this.cookie) headers.set('cookie', this.cookie);
-    const response = await fetch(`${appUrl}${path}`, { ...init, headers, redirect: 'manual' });
+    const response = await fetch(`${appUrl}${portalPath(path)}`, { ...init, headers, redirect: 'manual' });
     const setCookie = response.headers.get('set-cookie');
     if (setCookie) this.cookie = setCookie.split(';', 1)[0];
     const contentType = response.headers.get('content-type') || '';
@@ -21,8 +22,8 @@ class BrowserSession {
     if (!response.ok) throw new Error(`${init.method || 'GET'} ${path} retornou ${response.status}: ${JSON.stringify(body)}`);
     return { response, body };
   }
-  json(path, method, body) {
-    return this.request(path, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  json(path, method, body, headers = {}) {
+    return this.request(path, { method, headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   }
 }
 
@@ -41,19 +42,19 @@ const normal = postgres(process.env.DATABASE_URL, { max: 1, prepare: false });
 const privileged = postgres(process.env.PROVISIONING_DATABASE_URL, { max: 1, prepare: false });
 
 async function provision(path, body) {
-  const response = await fetch(`${appUrl}${path}`, { method: 'POST', headers: { authorization: `Bearer ${process.env.PROVISIONING_SECRET}`, 'idempotency-key': `e2e-${randomUUID()}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const response = await fetch(`${appUrl}${portalPath(path)}`, { method: 'POST', headers: { authorization: `Bearer ${process.env.PROVISIONING_SECRET}`, 'idempotency-key': `e2e-${randomUUID()}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const result = await response.json();
   if (!response.ok) throw new Error(`Provisionamento ${path} retornou ${response.status}: ${JSON.stringify(result)}`);
   return result;
 }
 
 async function loginAndChange(session, email, currentPassword, newPassword) {
-  await session.json('/api/auth/session', 'POST', { tenantSlug: slug, email, password: currentPassword });
+  await session.json('/api/auth/session', 'POST', { tenantSlug: slug, email, password: currentPassword }, { authorization: `Bearer ${process.env.PROVISIONING_SECRET}` });
   await session.json('/api/auth/password', 'POST', { currentPassword, newPassword });
 }
 
 async function uploadBlobDocument(session, pathname, file, payload) {
-  const blob = await upload(pathname, file, { access: 'private', handleUploadUrl: `${appUrl}/api/documents/upload`, headers: { cookie: session.cookie }, clientPayload: JSON.stringify(payload) });
+  const blob = await upload(pathname, file, { access: 'private', handleUploadUrl: `${appUrl}${portalPath('/api/documents/upload')}`, headers: { cookie: session.cookie }, clientPayload: JSON.stringify(payload) });
   blobPaths.push(blob.pathname);
   const completed = await session.json('/api/documents/complete', 'POST', { ...payload, pathname: blob.pathname });
   return completed.body.document;
@@ -122,7 +123,7 @@ try {
 
   const dashboard = await manager.request('/gestao');
   for (const text of ['Previsão de pagamento', 'R$ 950,00', 'Previsão de faturamento', 'R$ 1.900,00']) if (!dashboard.body.includes(text)) throw new Error(`Dashboard não contém: ${text}`);
-  const portal = await employee.request('/portal');
+  const portal = await employee.request('/funcionario');
   for (const text of ['Histórico de competências e pagamentos', 'Pagamento realizado', 'Nota Fiscal', 'Comprovante']) if (!portal.body.includes(text)) throw new Error(`Portal não contém: ${text}`);
   console.log(`E2E aprovado: tenant=${slug} competence=${competenceId} amount=95000 forecast=PDF dashboard=valid portal=valid`);
 } finally {

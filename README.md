@@ -2,7 +2,7 @@
 
 Portal multi-tenant para gestão de funcionários, competências, documentos e pagamentos da Synova.
 
-Produção: [https://synova-manage-people.vercel.app](https://synova-manage-people.vercel.app)
+Produção: [https://www.synovadigital.com.br/portal](https://www.synovadigital.com.br/portal)
 
 O procedimento de migração, segredos, publicação e verificação produtiva está em [`docs/production-runbook.md`](docs/production-runbook.md).
 
@@ -66,7 +66,7 @@ As requests exigem `Authorization: Bearer <PROVISIONING_SECRET>` e uma chave de 
 ### Criar tenant
 
 ```bash
-curl -X POST "$APP_URL/api/internal/provisioning/tenants" \
+curl -X POST "$APP_URL/portal/api/internal/provisioning/tenants" \
   -H "Authorization: Bearer $PROVISIONING_SECRET" \
   -H "Idempotency-Key: tenant-synova-v1" \
   -H "Content-Type: application/json" \
@@ -76,7 +76,7 @@ curl -X POST "$APP_URL/api/internal/provisioning/tenants" \
 ### Criar gestor
 
 ```bash
-curl -X POST "$APP_URL/api/internal/provisioning/users" \
+curl -X POST "$APP_URL/portal/api/internal/provisioning/users" \
   -H "Authorization: Bearer $PROVISIONING_SECRET" \
   -H "Idempotency-Key: gestor-inicial-v1" \
   -H "Content-Type: application/json" \
@@ -88,7 +88,7 @@ Use `role: "employee"` para criar um usuário de funcionário e associe-o ao cad
 ### Associar usuário a funcionário
 
 ```bash
-curl -X POST "$APP_URL/api/internal/provisioning/users/<USER_ID>/employee" \
+curl -X POST "$APP_URL/portal/api/internal/provisioning/users/<USER_ID>/employee" \
   -H "Authorization: Bearer $PROVISIONING_SECRET" \
   -H "Idempotency-Key: associacao-<USER_ID>-v1" \
   -H "Content-Type: application/json" \
@@ -102,7 +102,7 @@ O usuário deve ter papel `employee`, estar ativo e pertencer ao mesmo tenant do
 Gere uma chave aleatória de alta entropia no canal operacional e envie seu valor uma única vez. Somente um HMAC não reversível será persistido.
 
 ```bash
-curl -X POST "$APP_URL/api/internal/provisioning/service-keys" \
+curl -X POST "$APP_URL/portal/api/internal/provisioning/service-keys" \
   -H "Authorization: Bearer $PROVISIONING_SECRET" \
   -H "Idempotency-Key: portal-vagas-<TENANT_ID>-v1" \
   -H "Content-Type: application/json" \
@@ -112,7 +112,7 @@ curl -X POST "$APP_URL/api/internal/provisioning/service-keys" \
 ### Redefinir senha temporária
 
 ```bash
-curl -X POST "$APP_URL/api/internal/provisioning/users/<USER_ID>/password" \
+curl -X POST "$APP_URL/portal/api/internal/provisioning/users/<USER_ID>/password" \
   -H "Authorization: Bearer $PROVISIONING_SECRET" \
   -H "Idempotency-Key: reset-<USER_ID>-v1" \
   -H "Content-Type: application/json" \
@@ -126,7 +126,7 @@ A senha temporária deve ter de 12 a 128 caracteres e incluir letra maiúscula, 
 A rota está disponível para o futuro consumidor, mas este repositório não altera o Portal de Vagas. Ela exige a chave de serviço cadastrada para o tenant, `externalHiringId` e `Idempotency-Key`.
 
 ```bash
-curl -X POST "$APP_URL/api/external/v1/hirings" \
+curl -X POST "$APP_URL/portal/api/external/v1/hirings" \
   -H "Authorization: Bearer $PORTAL_VAGAS_SERVICE_KEY" \
   -H "Idempotency-Key: contratacao-<EXTERNAL_HIRING_ID>-v1" \
   -H "Content-Type: application/json" \
@@ -140,11 +140,11 @@ Repetições equivalentes retornam o mesmo pré-cadastro. Reutilizar o identific
 Operações de clientes usam uma sessão de gestor e permanecem sob RLS. Autentique a CLI e reutilize o cookie somente no canal operacional:
 
 ```bash
-curl -c synova-session.txt -X POST "$APP_URL/api/auth/session" \
+curl -c synova-session.txt -X POST "$APP_URL/portal/api/auth/session" \
   -H "Content-Type: application/json" \
-  --data '{"tenantSlug":"<TENANT_SLUG>","email":"<GESTOR_EMAIL>","password":"<GESTOR_SENHA>"}'
+  --data '{"email":"<GESTOR_EMAIL>","password":"<GESTOR_SENHA>"}'
 
-curl -b synova-session.txt -X POST "$APP_URL/api/clients" \
+curl -b synova-session.txt -X POST "$APP_URL/portal/api/clients" \
   -H "Content-Type: application/json" \
   --data '{"name":"<NOME>","legalName":"<RAZAO_SOCIAL>","taxId":"<CNPJ>","contactName":null,"email":null,"phone":null,"address":null,"observations":null}'
 ```
@@ -156,26 +156,26 @@ O arquivo de cookies contém uma sessão autenticada e deve ser eliminado ao ter
 As requests abaixo reutilizam a sessão de gestor criada na seção anterior. Valores monetários são enviados em centavos.
 
 ```bash
-curl -b synova-session.txt -X POST "$APP_URL/api/employees/<EMPLOYEE_ID>/contracts" \
+curl -b synova-session.txt -X POST "$APP_URL/portal/api/employees/<EMPLOYEE_ID>/contracts" \
   -H "Content-Type: application/json" \
   --data '{"contractType":"Prestação de serviços","startDate":"2026-08-01","endDate":null,"documentId":null,"observations":null}'
 
-curl -b synova-session.txt -X POST "$APP_URL/api/employees/<EMPLOYEE_ID>/financial-conditions" \
+curl -b synova-session.txt -X POST "$APP_URL/portal/api/employees/<EMPLOYEE_ID>/financial-conditions" \
   -H "Content-Type: application/json" \
   --data '{"hourlyRateCents":12500,"effectiveFrom":"2026-08-01","observations":null}'
 
-curl -b synova-session.txt -X POST "$APP_URL/api/employees/<EMPLOYEE_ID>/allocations" \
+curl -b synova-session.txt -X POST "$APP_URL/portal/api/employees/<EMPLOYEE_ID>/allocations" \
   -H "Content-Type: application/json" \
   --data '{"clientId":"<CLIENT_ID>","managerUserId":"<MANAGER_USER_ID>","roleTitle":"Consultor","startDate":"2026-08-01","endDate":null,"observations":null}'
 
-curl -b synova-session.txt -X POST "$APP_URL/api/allocations/<ALLOCATION_ID>/commercial-conditions" \
+curl -b synova-session.txt -X POST "$APP_URL/portal/api/allocations/<ALLOCATION_ID>/commercial-conditions" \
   -H "Content-Type: application/json" \
   --data '{"hourlyRateCents":22000,"effectiveFrom":"2026-08-01","observations":null}'
 
-curl -b synova-session.txt -X POST "$APP_URL/api/contracts/<CONTRACT_ID>/end" \
+curl -b synova-session.txt -X POST "$APP_URL/portal/api/contracts/<CONTRACT_ID>/end" \
   -H "Content-Type: application/json" --data '{"endDate":"2026-12-31"}'
 
-curl -b synova-session.txt -X POST "$APP_URL/api/allocations/<ALLOCATION_ID>/end" \
+curl -b synova-session.txt -X POST "$APP_URL/portal/api/allocations/<ALLOCATION_ID>/end" \
   -H "Content-Type: application/json" --data '{"endDate":"2026-12-31"}'
 ```
 
@@ -186,21 +186,21 @@ Cada nova condição cria uma vigência; ela não sobrescreve valores histórico
 As rotas usam a sessão do próprio funcionário. A competência é aberta automaticamente com a alocação válida no mês, e as durações são enviadas em minutos.
 
 ```bash
-curl -c synova-employee-session.txt -X POST "$APP_URL/api/auth/session" \
+curl -c synova-employee-session.txt -X POST "$APP_URL/portal/api/auth/session" \
   -H "Content-Type: application/json" \
-  --data '{"tenantSlug":"<TENANT_SLUG>","email":"<FUNCIONARIO_EMAIL>","password":"<FUNCIONARIO_SENHA>"}'
+  --data '{"email":"<FUNCIONARIO_EMAIL>","password":"<FUNCIONARIO_SENHA>"}'
 
-curl -b synova-employee-session.txt -X POST "$APP_URL/api/portal/competencies" \
+curl -b synova-employee-session.txt -X POST "$APP_URL/portal/api/portal/competencies" \
   -H "Content-Type: application/json" --data '{"month":"2026-08"}'
 
-curl -b synova-employee-session.txt -X POST "$APP_URL/api/portal/competencies/<COMPETENCE_ID>/entries" \
+curl -b synova-employee-session.txt -X POST "$APP_URL/portal/api/portal/competencies/<COMPETENCE_ID>/entries" \
   -H "Content-Type: application/json" \
   --data '{"workDate":"2026-08-03","minutes":480,"observation":"Atividades do dia"}'
 
-curl -b synova-employee-session.txt "$APP_URL/api/portal/competencies/<COMPETENCE_ID>"
+curl -b synova-employee-session.txt "$APP_URL/portal/api/portal/competencies/<COMPETENCE_ID>"
 
 curl -b synova-employee-session.txt -X DELETE \
-  "$APP_URL/api/portal/competencies/<COMPETENCE_ID>/entries/<ENTRY_ID>"
+  "$APP_URL/portal/api/portal/competencies/<COMPETENCE_ID>/entries/<ENTRY_ID>"
 ```
 
 Salvar novamente a mesma data atualiza a linha existente. O cookie de sessão deve ser eliminado após o uso.
@@ -210,24 +210,24 @@ Salvar novamente a mesma data atualiza a linha existente. O cookie de sessão de
 ```bash
 # Funcionário envia o consolidado
 curl -b synova-employee-session.txt -X POST \
-  "$APP_URL/api/portal/competencies/<COMPETENCE_ID>/submit"
+  "$APP_URL/portal/api/portal/competencies/<COMPETENCE_ID>/submit"
 
 # Gestor consulta sua fila e uma competência
-curl -b synova-session.txt "$APP_URL/api/management/competencies"
-curl -b synova-session.txt "$APP_URL/api/management/competencies/<COMPETENCE_ID>"
+curl -b synova-session.txt "$APP_URL/portal/api/management/competencies"
+curl -b synova-session.txt "$APP_URL/portal/api/management/competencies/<COMPETENCE_ID>"
 
 # Gestor solicita ajustes ou aprova
 curl -b synova-session.txt -X POST \
-  "$APP_URL/api/management/competencies/<COMPETENCE_ID>/adjustments" \
+  "$APP_URL/portal/api/management/competencies/<COMPETENCE_ID>/adjustments" \
   -H "Content-Type: application/json" --data '{"reason":"Detalhar as atividades."}'
 curl -b synova-session.txt -X POST \
-  "$APP_URL/api/management/competencies/<COMPETENCE_ID>/approve"
+  "$APP_URL/portal/api/management/competencies/<COMPETENCE_ID>/approve"
 
 # Qualquer usuário autenticado consulta suas notificações
-curl -b synova-employee-session.txt "$APP_URL/api/notifications"
+curl -b synova-employee-session.txt "$APP_URL/portal/api/notifications"
 ```
 
-O job `/api/internal/jobs/month-close-reminders` exige `Authorization: Bearer $CRON_SECRET`. A configuração da Vercel chama a rota diariamente às 12:00 UTC; a aplicação só gera lembretes no último dia útil nacional, considerando a data em `America/Sao_Paulo`.
+O job `/portal/api/internal/jobs/month-close-reminders` exige `Authorization: Bearer $CRON_SECRET`. A configuração da Vercel chama a rota diariamente às 12:00 UTC; a aplicação só gera lembretes no último dia útil nacional, considerando a data em `America/Sao_Paulo`.
 
 ## Nota Fiscal e pagamento via CLI
 
@@ -235,14 +235,14 @@ Depois da aprovação, o funcionário baixa a previsão e envia a Nota Fiscal. E
 
 ```bash
 curl -b synova-employee-session.txt -o previsao.pdf \
-  "$APP_URL/api/documents/<FORECAST_DOCUMENT_ID>/download"
+  "$APP_URL/portal/api/documents/<FORECAST_DOCUMENT_ID>/download"
 
 curl -b synova-employee-session.txt -X POST \
-  "$APP_URL/api/portal/competencies/<COMPETENCE_ID>/invoice" \
+  "$APP_URL/portal/api/portal/competencies/<COMPETENCE_ID>/invoice" \
   -F 'file=@nota-fiscal.pdf;type=application/pdf'
 
 curl -b synova-session.txt -X POST \
-  "$APP_URL/api/management/competencies/<COMPETENCE_ID>/payment" \
+  "$APP_URL/portal/api/management/competencies/<COMPETENCE_ID>/payment" \
   -F 'paidDate=2026-08-20' \
   -F 'notes=Pagamento realizado externamente' \
   -F 'file=@comprovante.pdf;type=application/pdf'

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { portalPath } from '@/lib/routing/base-path';
 
 type ClientItem = { id: string; name: string; legalName: string | null; taxId: string | null; contactName: string | null; email: string | null; phone: string | null; status: 'active' | 'inactive'; createdAt: string };
 
@@ -18,7 +19,7 @@ export function ClientManager({ clients }: { clients: ClientItem[] }) {
     const formElement = event.currentTarget; const form = new FormData(formElement);
     const value = (name: string) => String(form.get(name) || '').trim() || null;
     try {
-      const response = await fetch('/api/clients', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: value('name'), legalName: value('legalName'), taxId: value('taxId'), contactName: value('contactName'), email: value('email'), phone: value('phone'), address: null, observations: value('observations') }) });
+      const response = await fetch(portalPath('/api/clients'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: value('name'), legalName: value('legalName'), taxId: value('taxId'), contactName: value('contactName'), email: value('email'), phone: value('phone'), address: null, observations: value('observations') }) });
       const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || 'Não foi possível criar o cliente.');
       formElement.reset(); setMessage('Cliente criado e pronto para receber alocações.'); router.refresh();
     } catch (submissionError) { setError(submissionError instanceof Error ? submissionError.message : 'Não foi possível criar o cliente.'); } finally { setBusy(false); }
@@ -27,7 +28,7 @@ export function ClientManager({ clients }: { clients: ClientItem[] }) {
   async function inactivate(client: ClientItem) {
     if (!window.confirm(`Inativar ${client.name}? O histórico será preservado.`)) return;
     setInactivating(client.id); setMessage(''); setError('');
-    try { const response = await fetch(`/api/clients/${client.id}/inactivate`, { method: 'POST' }); const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || 'Não foi possível inativar.'); setMessage(`${client.name} foi inativado.`); router.refresh(); }
+    try { const response = await fetch(portalPath(`/api/clients/${client.id}/inactivate`), { method: 'POST' }); const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || 'Não foi possível inativar.'); setMessage(`${client.name} foi inativado.`); router.refresh(); }
     catch (submissionError) { setError(submissionError instanceof Error ? submissionError.message : 'Não foi possível inativar.'); } finally { setInactivating(null); }
   }
 

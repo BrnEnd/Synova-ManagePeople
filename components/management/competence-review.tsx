@@ -4,6 +4,7 @@ import { upload } from '@vercel/blob/client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { portalPath } from '@/lib/routing/base-path';
 
 type Review = {
   competence: {
@@ -25,7 +26,7 @@ export function CompetenceReview({ review, blobEnabled }: { review: Review; blob
   async function action(endpoint: string, payload?: object) {
     setBusy(endpoint); setError('');
     try {
-      const response = await fetch(endpoint, { method: 'POST', headers: payload ? { 'content-type': 'application/json' } : undefined, body: payload ? JSON.stringify(payload) : undefined });
+      const response = await fetch(portalPath(endpoint), { method: 'POST', headers: payload ? { 'content-type': 'application/json' } : undefined, body: payload ? JSON.stringify(payload) : undefined });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || 'Não foi possível concluir.');
       router.push('/gestao/competencias'); router.refresh();
@@ -46,14 +47,14 @@ export function CompetenceReview({ review, blobEnabled }: { review: Review; blob
       if (blobEnabled) {
         const originalName = file.name;
         const pathname = `tenants/${review.competence.tenantId}/employees/${review.competence.employeeId}/competencies/${review.competence.id}/${crypto.randomUUID()}-${originalName.replace(/[^a-zA-Z0-9._-]+/g, '-')}`;
-        const blob = await upload(pathname, file, { access: 'private', handleUploadUrl: '/api/documents/upload', multipart: file.size > 5 * 1024 * 1024, clientPayload: JSON.stringify({ employeeId: review.competence.employeeId, type: 'payment_receipt', originalName }) });
-        const completion = await fetch('/api/documents/complete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ employeeId: review.competence.employeeId, type: 'payment_receipt', originalName, pathname: blob.pathname }) });
+        const blob = await upload(pathname, file, { access: 'private', handleUploadUrl: portalPath('/api/documents/upload'), multipart: file.size > 5 * 1024 * 1024, clientPayload: JSON.stringify({ employeeId: review.competence.employeeId, type: 'payment_receipt', originalName }) });
+        const completion = await fetch(portalPath('/api/documents/complete'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ employeeId: review.competence.employeeId, type: 'payment_receipt', originalName, pathname: blob.pathname }) });
         const completed = await completion.json() as { error?: string; document?: { id: string } };
         if (!completion.ok || !completed.document) throw new Error(completed.error || 'Não foi possível concluir o comprovante.');
-        const response = await fetch(`/api/management/competencies/${review.competence.id}/payment`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ receiptDocumentId: completed.document.id, notes: String(form.get('notes') || '') || null, paidDate: String(form.get('paidDate') || '') || null }) });
+        const response = await fetch(portalPath(`/api/management/competencies/${review.competence.id}/payment`), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ receiptDocumentId: completed.document.id, notes: String(form.get('notes') || '') || null, paidDate: String(form.get('paidDate') || '') || null }) });
         const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || 'Não foi possível registrar o pagamento.');
       } else {
-        const response = await fetch(`/api/management/competencies/${review.competence.id}/payment`, { method: 'POST', body: form });
+        const response = await fetch(portalPath(`/api/management/competencies/${review.competence.id}/payment`), { method: 'POST', body: form });
         const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || 'Não foi possível registrar o pagamento.');
       }
       router.push('/gestao'); router.refresh();

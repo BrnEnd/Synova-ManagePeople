@@ -30,6 +30,8 @@ Nunca configure `DATABASE_URL_UNPOOLED`, `POSTGRES_URL` ou outra credencial prop
 - `PROVISIONING_IDEMPOTENCY_SECRET`
 - `CRON_SECRET`
 - `BLOB_READ_WRITE_TOKEN` ou OIDC com `BLOB_STORE_ID`
+- `CANONICAL_PORTAL_URL=https://www.synovadigital.com.br/portal`
+- `PORTAL_PROXY_SECRET`, compartilhado somente com o gateway do `page-synova`
 
 Segredos são gerados aleatoriamente, armazenados como variáveis protegidas da Vercel e nunca versionados. A rotação de `PROVISIONING_SECRET` não deve alterar `PROVISIONING_IDEMPOTENCY_SECRET`, pois este preserva a equivalência das requests idempotentes.
 
@@ -43,7 +45,9 @@ npm run build
 vercel --prod
 ```
 
-Depois da publicação, valide `/entrar`, execute o smoke E2E com um tenant descartável e confirme que o cleanup removeu banco e blobs sintéticos. Inspecione também o deployment e os logs da Vercel antes de considerar a etapa concluída.
+Depois da publicação, valide `/portal/entrar`, execute o smoke E2E com um tenant descartável e confirme que o cleanup removeu banco e blobs sintéticos. Inspecione também o deployment e os logs da Vercel antes de considerar a etapa concluída.
+
+O alias técnico do projeto People deve redirecionar para a URL canônica quando o cabeçalho privado do gateway não estiver presente. O gateway é responsável por encaminhar o cabeçalho, corpo, query string e cookies sem armazenar respostas autenticadas em cache.
 
 ## Provisionamento inicial
 

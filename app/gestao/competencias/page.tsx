@@ -13,7 +13,7 @@ export default async function CompetenciesPage({ searchParams }: { searchParams:
   const identity = await getCurrentIdentity();
   if (!identity) redirect('/entrar');
   if (identity.mustChangePassword) redirect('/alterar-senha');
-  if (identity.role !== 'manager') redirect('/portal');
+  if (identity.role !== 'manager') redirect('/funcionario');
   const requested = (await searchParams).status;
   const status = allowedStatuses.find((item) => item === requested);
   const statuses: CompetenceStatus[] = status ? [status] : ['awaiting_approval', 'awaiting_payment'];

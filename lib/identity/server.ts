@@ -5,6 +5,7 @@ import { createIdentityModule } from '@/lib/identity/module';
 import { hashPassword, verifyPassword } from '@/lib/identity/password';
 import { PostgresIdentityRepository } from '@/lib/identity/postgres-repository';
 import { createSessionToken, readSessionToken } from '@/lib/identity/session-token';
+import { PORTAL_BASE_PATH } from '@/lib/routing/base-path';
 
 const SESSION_COOKIE = 'synova_people_session';
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
@@ -31,14 +32,21 @@ export async function createBrowserSession(identity: Identity) {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    path: '/',
+    path: PORTAL_BASE_PATH,
     expires: new Date(now.getTime() + SESSION_DURATION_MS),
     priority: 'high',
   });
 }
 
 export async function deleteBrowserSession() {
-  (await cookies()).delete(SESSION_COOKIE);
+  (await cookies()).set(SESSION_COOKIE, '', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    path: PORTAL_BASE_PATH,
+    expires: new Date(0),
+    priority: 'high',
+  });
 }
 
 export async function getCurrentIdentity() {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { portalPath } from '@/lib/routing/base-path';
 import { useState } from 'react';
 
 export function LogoutButton() {
@@ -9,7 +10,7 @@ export function LogoutButton() {
 
   async function logout() {
     setBusy(true);
-    await fetch('/api/auth/session', { method: 'DELETE' });
+    await fetch(portalPath('/api/auth/session'), { method: 'DELETE' });
     router.replace('/entrar');
     router.refresh();
   }

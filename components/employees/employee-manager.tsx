@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
+import { portalPath } from '@/lib/routing/base-path';
 
 export type EmployeeListItem = {
   id: string;
@@ -48,7 +49,7 @@ export function EmployeeManager({ employees }: { employees: EmployeeListItem[] }
     };
 
     try {
-      const response = await fetch('/api/employees', {
+      const response = await fetch(portalPath('/api/employees'), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
@@ -71,7 +72,7 @@ export function EmployeeManager({ employees }: { employees: EmployeeListItem[] }
     setError('');
     setMessage('');
     try {
-      const response = await fetch(`/api/employees/${employee.id}/inactivate`, { method: 'POST' });
+      const response = await fetch(portalPath(`/api/employees/${employee.id}/inactivate`), { method: 'POST' });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || 'Não foi possível inativar o funcionário.');
       setMessage(`${employee.fullName} foi inativado sem apagar o histórico.`);

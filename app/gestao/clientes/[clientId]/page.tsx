@@ -8,7 +8,7 @@ export default async function ClientPage({ params }: PageProps<'/gestao/clientes
   const identity = await getCurrentIdentity();
   if (!identity) redirect('/entrar');
   if (identity.mustChangePassword) redirect('/alterar-senha');
-  if (identity.role !== 'manager') redirect('/portal');
+  if (identity.role !== 'manager') redirect('/funcionario');
   const { clientId } = await params;
   const client = await getClientsModule().get(identity.tenantId, clientId);
   if (!client) notFound();
