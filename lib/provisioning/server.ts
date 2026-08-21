@@ -8,6 +8,8 @@ import { PostgresProvisioningRepository } from '@/lib/provisioning/postgres-repo
 export function getProvisioningHttp() {
   const secret = process.env.PROVISIONING_SECRET;
   if (!secret) throw new Error('PROVISIONING_SECRET não configurado.');
+  const idempotencySecret = process.env.PROVISIONING_IDEMPOTENCY_SECRET;
+  if (!idempotencySecret) throw new Error('PROVISIONING_IDEMPOTENCY_SECRET não configurado.');
 
   return createProvisioningHttp({
     secret,
@@ -16,6 +18,7 @@ export function getProvisioningHttp() {
       generateId: randomUUID,
       now: () => new Date(),
       hashPassword,
+      idempotencySecret,
     }),
   });
 }

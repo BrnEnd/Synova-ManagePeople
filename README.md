@@ -7,7 +7,18 @@ Portal multi-tenant para gestão de funcionários, competências, documentos e p
 1. Copie `.env.example` para `.env.local` e configure Postgres e os segredos.
 2. Instale as dependências com `npm install`.
 3. Aplique as migrações com `npm run db:migrate`.
-4. Inicie a aplicação com `npm run dev`.
+4. Crie a role restrita de provisionamento e conceda apenas os acessos necessários:
+
+```sql
+CREATE ROLE synova_provisioner LOGIN PASSWORD '<SENHA_FORTE>';
+GRANT CONNECT ON DATABASE <BANCO> TO synova_provisioner;
+GRANT USAGE ON SCHEMA public TO synova_provisioner;
+GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, users, audit_events, idempotency_records TO synova_provisioner;
+```
+
+5. Configure `PROVISIONING_DATABASE_URL` com essa role e inicie a aplicação com `npm run dev`.
+
+`DATABASE_URL` deve usar outra role, sem superusuário, sem `BYPASSRLS` e sem vínculo com `synova_provisioner`. A separação de credenciais impede que requests normais contornem as políticas de tenant no Postgres.
 
 Verificações disponíveis:
 
@@ -18,9 +29,19 @@ npm run lint
 npm run build
 ```
 
+O teste de persistência e RLS exige um banco já migrado e duas URLs com as mesmas restrições de roles descritas acima:
+
+```bash
+TEST_DATABASE_URL='<URL_COMUM>' \
+TEST_PROVISIONING_DATABASE_URL='<URL_SYNOVA_PROVISIONER>' \
+npm run test:integration
+```
+
 ## Provisionamento inicial
 
 As requests exigem `Authorization: Bearer <PROVISIONING_SECRET>` e uma chave de idempotência exclusiva para a operação.
+
+`PROVISIONING_SECRET` pode ser rotacionado sem invalidar requests anteriores. `PROVISIONING_IDEMPOTENCY_SECRET` é um segredo separado e estável, usado somente para gerar HMACs do conteúdo idempotente sem persistir um verificador offline das senhas temporárias.
 
 ### Criar tenant
 

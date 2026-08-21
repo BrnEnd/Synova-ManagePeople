@@ -1,8 +1,8 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { and, eq, sql } from 'drizzle-orm';
-import { getDb } from '@/lib/db/client';
 import { auditEvents, idempotencyRecords, tenants, users } from '@/lib/db/schema';
+import { withProvisioningTransaction, type DatabaseTransaction } from '@/lib/db/transactions';
 import type { ProvisioningRepository, Tenant, User } from '@/lib/provisioning/module';
 
 const TENANT_SCOPE = 'tenant:create';
@@ -30,22 +30,13 @@ function mapUser(row: typeof users.$inferSelect): User {
   };
 }
 
-async function lockIdempotency(tx: Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0], scope: string, key: string) {
+async function lockIdempotency(tx: DatabaseTransaction, scope: string, key: string) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${scope}), hashtext(${key}))`);
-}
-
-async function setTenant(tx: Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0], tenantId: string) {
-  await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
-}
-
-async function enableProvisioning(tx: Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0]) {
-  await tx.execute(sql`select set_config('app.provisioning', 'on', true)`);
 }
 
 export class PostgresProvisioningRepository implements ProvisioningRepository {
   async createTenantIdempotently(input: Parameters<ProvisioningRepository['createTenantIdempotently']>[0]) {
-    return getDb().transaction(async (tx) => {
-      await enableProvisioning(tx);
+    return withProvisioningTransaction(async (tx) => {
       await lockIdempotency(tx, TENANT_SCOPE, input.idempotencyKey);
       const [existing] = await tx.select().from(idempotencyRecords).where(and(
         eq(idempotencyRecords.scope, TENANT_SCOPE),
@@ -58,7 +49,6 @@ export class PostgresProvisioningRepository implements ProvisioningRepository {
         return { tenant: mapTenant(tenant), replayed: true, requestHash: existing.requestHash };
       }
 
-      await setTenant(tx, input.tenant.id);
       const [created] = await tx.insert(tenants).values({
         ...input.tenant,
         updatedAt: input.tenant.createdAt,
@@ -88,9 +78,7 @@ export class PostgresProvisioningRepository implements ProvisioningRepository {
 
   async createUserIdempotently(input: Parameters<ProvisioningRepository['createUserIdempotently']>[0]) {
     const scope = `tenant:${input.user.tenantId}:user:create`;
-    return getDb().transaction(async (tx) => {
-      await enableProvisioning(tx);
-      await setTenant(tx, input.user.tenantId);
+    return withProvisioningTransaction(async (tx) => {
       await lockIdempotency(tx, scope, input.idempotencyKey);
       const [existing] = await tx.select().from(idempotencyRecords).where(and(
         eq(idempotencyRecords.scope, scope),
@@ -134,9 +122,7 @@ export class PostgresProvisioningRepository implements ProvisioningRepository {
 
   async resetPasswordIdempotently(input: Parameters<ProvisioningRepository['resetPasswordIdempotently']>[0]) {
     const scope = `tenant:${input.tenantId}:user:password:reset`;
-    return getDb().transaction(async (tx) => {
-      await enableProvisioning(tx);
-      await setTenant(tx, input.tenantId);
+    return withProvisioningTransaction(async (tx) => {
       await lockIdempotency(tx, scope, input.idempotencyKey);
       const [existing] = await tx.select().from(idempotencyRecords).where(and(
         eq(idempotencyRecords.scope, scope),

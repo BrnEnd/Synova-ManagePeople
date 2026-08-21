@@ -74,11 +74,11 @@ ALTER TABLE "users" FORCE ROW LEVEL SECURITY;
 CREATE POLICY "users_tenant_isolation" ON "users"
 	USING (
 		"tenant_id" = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-		OR current_setting('app.provisioning', true) = 'on'
+		OR current_user = 'synova_provisioner'
 	)
 	WITH CHECK (
 		"tenant_id" = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-		OR current_setting('app.provisioning', true) = 'on'
+		OR current_user = 'synova_provisioner'
 	);
 --> statement-breakpoint
 ALTER TABLE "audit_events" ENABLE ROW LEVEL SECURITY;
@@ -88,11 +88,11 @@ ALTER TABLE "audit_events" FORCE ROW LEVEL SECURITY;
 CREATE POLICY "audit_events_tenant_isolation" ON "audit_events"
 	USING (
 		"tenant_id" = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-		OR current_setting('app.provisioning', true) = 'on'
+		OR current_user = 'synova_provisioner'
 	)
 	WITH CHECK (
 		"tenant_id" = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-		OR current_setting('app.provisioning', true) = 'on'
+		OR current_user = 'synova_provisioner'
 	);
 --> statement-breakpoint
 ALTER TABLE "idempotency_records" ENABLE ROW LEVEL SECURITY;
@@ -102,9 +102,9 @@ ALTER TABLE "idempotency_records" FORCE ROW LEVEL SECURITY;
 CREATE POLICY "idempotency_records_tenant_isolation" ON "idempotency_records"
 	USING (
 		"tenant_id" = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-		OR current_setting('app.provisioning', true) = 'on'
+		OR current_user = 'synova_provisioner'
 	)
 	WITH CHECK (
 		"tenant_id" = NULLIF(current_setting('app.tenant_id', true), '')::uuid
-		OR current_setting('app.provisioning', true) = 'on'
+		OR current_user = 'synova_provisioner'
 	);

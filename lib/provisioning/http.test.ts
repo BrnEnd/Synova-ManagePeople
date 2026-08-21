@@ -13,6 +13,7 @@ function createTestHttp() {
     generateId: () => ids.shift()!,
     now: () => new Date('2026-08-20T12:00:00.000Z'),
     hashPassword: async () => ({ salt: 'salt', hash: 'hash' }),
+    idempotencySecret: 'test-idempotency-secret',
   });
   return createProvisioningHttp({ provisioning, secret: 'a'.repeat(32) });
 }

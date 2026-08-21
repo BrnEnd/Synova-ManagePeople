@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { identityDestination } from '@/lib/identity/destination';
 
 export function LoginForm() {
   const router = useRouter();
@@ -26,9 +27,7 @@ export function LoginForm() {
         identity?: { role: 'manager' | 'employee'; mustChangePassword: boolean };
       };
       if (!response.ok || !body.identity) throw new Error(body.error || 'Não foi possível entrar.');
-      const destination = body.identity.mustChangePassword
-        ? '/alterar-senha'
-        : body.identity.role === 'manager' ? '/gestao' : '/portal';
+      const destination = identityDestination(body.identity);
       router.replace(destination);
       router.refresh();
     } catch (submitError) {

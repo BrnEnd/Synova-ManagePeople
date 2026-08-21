@@ -15,6 +15,20 @@ const user = {
 };
 
 describe('identidade', () => {
+  test('isola tentativas de login por tenant', async () => {
+    const repository = new InMemoryIdentityRepository([]);
+    const attempt = {
+      failures: 1,
+      windowStartedAt: new Date('2026-08-20T12:00:00.000Z'),
+      blockedUntil: null,
+    };
+
+    await repository.saveLoginAttempt('synova', 'same-key', attempt, attempt.windowStartedAt);
+
+    await expect(repository.getLoginAttempt('synova', 'same-key')).resolves.toEqual(attempt);
+    await expect(repository.getLoginAttempt('outro', 'same-key')).resolves.toBeNull();
+  });
+
   test('autentica no tenant correto e retorna somente a identidade segura', async () => {
     const identity = createIdentityModule({
       repository: new InMemoryIdentityRepository([user]),

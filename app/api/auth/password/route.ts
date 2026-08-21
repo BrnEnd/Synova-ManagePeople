@@ -1,15 +1,11 @@
 import { z } from 'zod';
+import { InvalidCurrentPasswordError } from '@/lib/identity/module';
+import { strongPasswordMessage, strongPasswordSchema } from '@/lib/identity/password-policy';
 import { getCurrentIdentity, getIdentityModule } from '@/lib/identity/server';
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1).max(128),
-  newPassword: z.string()
-    .min(12)
-    .max(128)
-    .regex(/[a-z]/)
-    .regex(/[A-Z]/)
-    .regex(/[0-9]/)
-    .regex(/[^a-zA-Z0-9]/),
+  newPassword: strongPasswordSchema,
 }).strict().refine((value) => value.currentPassword !== value.newPassword, {
   message: 'A nova senha deve ser diferente da atual.',
   path: ['newPassword'],
@@ -28,14 +24,18 @@ export async function POST(request: Request) {
   const parsed = passwordSchema.safeParse(payload);
   if (!parsed.success) {
     return Response.json({
-      error: 'A nova senha deve ter ao menos 12 caracteres, com maiúscula, minúscula, número e símbolo.',
+      error: strongPasswordMessage,
     }, { status: 422 });
   }
 
   try {
     await getIdentityModule().changePassword({ identity, ...parsed.data });
     return Response.json({ success: true });
-  } catch {
-    return Response.json({ error: 'Senha atual inválida.' }, { status: 400 });
+  } catch (error) {
+    if (error instanceof InvalidCurrentPasswordError) {
+      return Response.json({ error: error.message }, { status: 400 });
+    }
+    console.error('Falha ao alterar senha:', error);
+    return Response.json({ error: 'Não foi possível alterar a senha.' }, { status: 500 });
   }
 }

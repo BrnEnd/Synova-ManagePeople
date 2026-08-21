@@ -26,12 +26,19 @@ export type LoginAttempt = {
 export type IdentityRepository = {
   findLoginUser(tenantSlug: string, email: string): Promise<LoginUser | null>;
   findActiveIdentity(userId: string, tenantId: string): Promise<Identity | null>;
-  getLoginAttempt(key: string): Promise<LoginAttempt | null>;
-  saveLoginAttempt(key: string, attempt: LoginAttempt, now: Date): Promise<void>;
-  clearLoginAttempt(key: string): Promise<void>;
+  getLoginAttempt(tenantSlug: string, key: string): Promise<LoginAttempt | null>;
+  saveLoginAttempt(tenantSlug: string, key: string, attempt: LoginAttempt, now: Date): Promise<void>;
+  clearLoginAttempt(tenantSlug: string, key: string): Promise<void>;
   markLoginSuccessful(identity: Identity, now: Date): Promise<void>;
   updatePassword(userId: string, tenantId: string, password: StoredPassword, now: Date): Promise<Identity>;
 };
+
+export class InvalidCurrentPasswordError extends Error {
+  constructor() {
+    super('Senha atual inválida.');
+    this.name = 'InvalidCurrentPasswordError';
+  }
+}
 
 type IdentityDependencies = {
   repository: IdentityRepository;
@@ -86,7 +93,7 @@ export function createIdentityModule(dependencies: IdentityDependencies) {
           salt: user.passwordSalt,
           hash: user.passwordHash,
         }));
-      if (!valid) throw new Error('Senha atual inválida.');
+      if (!valid) throw new InvalidCurrentPasswordError();
 
       const stored = await dependencies.hashPassword(command.newPassword);
       return dependencies.repository.updatePassword(command.identity.id, command.identity.tenantId, stored, dependencies.now());
@@ -97,7 +104,7 @@ export function createIdentityModule(dependencies: IdentityDependencies) {
       const email = command.email.trim().toLowerCase();
       const now = dependencies.now();
       const key = attemptKey(tenantSlug, email, command.ip);
-      const attempt = await dependencies.repository.getLoginAttempt(key);
+      const attempt = await dependencies.repository.getLoginAttempt(tenantSlug, key);
       if (attempt?.blockedUntil && attempt.blockedUntil > now) {
         return { identity: null, rateLimited: true };
       }
@@ -111,7 +118,7 @@ export function createIdentityModule(dependencies: IdentityDependencies) {
       if (!user || !valid) {
         const windowExpired = !attempt || now.getTime() - attempt.windowStartedAt.getTime() >= LOGIN_WINDOW_MS;
         const failures = windowExpired ? 1 : attempt.failures + 1;
-        await dependencies.repository.saveLoginAttempt(key, {
+        await dependencies.repository.saveLoginAttempt(tenantSlug, key, {
           failures,
           windowStartedAt: windowExpired ? now : attempt.windowStartedAt,
           blockedUntil: failures >= LOGIN_MAX_FAILURES ? new Date(now.getTime() + LOGIN_BLOCK_MS) : null,
@@ -120,7 +127,7 @@ export function createIdentityModule(dependencies: IdentityDependencies) {
       }
 
       const identity = safeIdentity(user);
-      await dependencies.repository.clearLoginAttempt(key);
+      await dependencies.repository.clearLoginAttempt(tenantSlug, key);
       await dependencies.repository.markLoginSuccessful(identity, now);
       return { identity, rateLimited: false };
     },

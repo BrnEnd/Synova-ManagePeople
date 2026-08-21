@@ -1,12 +1,17 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db/client';
 import { auditEvents, loginAttempts, tenants, users } from '@/lib/db/schema';
+import { withTenantTransaction } from '@/lib/db/transactions';
 import type { Identity, IdentityRepository, LoginUser } from '@/lib/identity/module';
 
-async function setTenant(tx: Parameters<Parameters<ReturnType<typeof getDb>['transaction']>[0]>[0], tenantId: string) {
-  await tx.execute(sql`select set_config('app.tenant_id', ${tenantId}, true)`);
+async function findActiveTenant(tenantSlug: string) {
+  const [tenant] = await getDb().select({ id: tenants.id, slug: tenants.slug }).from(tenants).where(and(
+    eq(tenants.slug, tenantSlug),
+    eq(tenants.status, 'active'),
+  )).limit(1);
+  return tenant ?? null;
 }
 
 function mapIdentity(user: typeof users.$inferSelect, tenantSlug: string): Identity {
@@ -23,15 +28,10 @@ function mapIdentity(user: typeof users.$inferSelect, tenantSlug: string): Ident
 
 export class PostgresIdentityRepository implements IdentityRepository {
   async findLoginUser(tenantSlug: string, email: string): Promise<LoginUser | null> {
-    const db = getDb();
-    const [tenant] = await db.select({ id: tenants.id, slug: tenants.slug }).from(tenants).where(and(
-      eq(tenants.slug, tenantSlug),
-      eq(tenants.status, 'active'),
-    )).limit(1);
+    const tenant = await findActiveTenant(tenantSlug);
     if (!tenant) return null;
 
-    return db.transaction(async (tx) => {
-      await setTenant(tx, tenant.id);
+    return withTenantTransaction(tenant.id, async (tx) => {
       const [user] = await tx.select().from(users).where(and(
         eq(users.tenantId, tenant.id),
         eq(users.email, email),
@@ -47,15 +47,13 @@ export class PostgresIdentityRepository implements IdentityRepository {
   }
 
   async findActiveIdentity(userId: string, tenantId: string) {
-    const db = getDb();
-    const [tenant] = await db.select({ id: tenants.id, slug: tenants.slug }).from(tenants).where(and(
+    const [tenant] = await getDb().select({ id: tenants.id, slug: tenants.slug }).from(tenants).where(and(
       eq(tenants.id, tenantId),
       eq(tenants.status, 'active'),
     )).limit(1);
     if (!tenant) return null;
 
-    return db.transaction(async (tx) => {
-      await setTenant(tx, tenant.id);
+    return withTenantTransaction(tenant.id, async (tx) => {
       const [user] = await tx.select().from(users).where(and(
         eq(users.id, userId),
         eq(users.tenantId, tenant.id),
@@ -65,8 +63,13 @@ export class PostgresIdentityRepository implements IdentityRepository {
     });
   }
 
-  async getLoginAttempt(key: string) {
-    const [attempt] = await getDb().select().from(loginAttempts).where(eq(loginAttempts.key, key)).limit(1);
+  async getLoginAttempt(tenantSlug: string, key: string) {
+    const tenant = await findActiveTenant(tenantSlug);
+    if (!tenant) return null;
+    const [attempt] = await withTenantTransaction(tenant.id, (tx) => tx.select().from(loginAttempts).where(and(
+      eq(loginAttempts.key, key),
+      eq(loginAttempts.tenantId, tenant.id),
+    )).limit(1));
     if (!attempt) return null;
     return {
       failures: attempt.failures,
@@ -75,24 +78,32 @@ export class PostgresIdentityRepository implements IdentityRepository {
     };
   }
 
-  async saveLoginAttempt(key: string, attempt: Parameters<IdentityRepository['saveLoginAttempt']>[1], now: Date) {
-    await getDb().insert(loginAttempts).values({
+  async saveLoginAttempt(tenantSlug: string, key: string, attempt: Parameters<IdentityRepository['saveLoginAttempt']>[2], now: Date) {
+    const tenant = await findActiveTenant(tenantSlug);
+    if (!tenant) return;
+    await withTenantTransaction(tenant.id, (tx) => tx.insert(loginAttempts).values({
       key,
+      tenantId: tenant.id,
       ...attempt,
       updatedAt: now,
     }).onConflictDoUpdate({
       target: loginAttempts.key,
       set: { ...attempt, updatedAt: now },
-    });
+      setWhere: eq(loginAttempts.tenantId, tenant.id),
+    }));
   }
 
-  async clearLoginAttempt(key: string) {
-    await getDb().delete(loginAttempts).where(eq(loginAttempts.key, key));
+  async clearLoginAttempt(tenantSlug: string, key: string) {
+    const tenant = await findActiveTenant(tenantSlug);
+    if (!tenant) return;
+    await withTenantTransaction(tenant.id, (tx) => tx.delete(loginAttempts).where(and(
+      eq(loginAttempts.key, key),
+      eq(loginAttempts.tenantId, tenant.id),
+    )));
   }
 
   async markLoginSuccessful(identity: Identity, now: Date) {
-    await getDb().transaction(async (tx) => {
-      await setTenant(tx, identity.tenantId);
+    await withTenantTransaction(identity.tenantId, async (tx) => {
       await tx.update(users).set({ lastLoginAt: now, updatedAt: now }).where(and(
         eq(users.id, identity.id),
         eq(users.tenantId, identity.tenantId),
@@ -110,8 +121,7 @@ export class PostgresIdentityRepository implements IdentityRepository {
   }
 
   async updatePassword(userId: string, tenantId: string, password: { salt: string; hash: string }, now: Date) {
-    return getDb().transaction(async (tx) => {
-      await setTenant(tx, tenantId);
+    return withTenantTransaction(tenantId, async (tx) => {
       const [tenant] = await tx.select({ slug: tenants.slug }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
       const [updated] = await tx.update(users).set({
         passwordSalt: password.salt,

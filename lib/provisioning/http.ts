@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
+import { strongPasswordSchema } from '@/lib/identity/password-policy';
 import { IdempotencyConflictError, createProvisioningModule } from '@/lib/provisioning/module';
 
 type ProvisioningModule = ReturnType<typeof createProvisioningModule>;
@@ -19,24 +20,12 @@ const userSchema = z.object({
   email: z.email().max(254),
   displayName: z.string().trim().min(2).max(160),
   role: z.enum(['manager', 'employee']),
-  temporaryPassword: z.string()
-    .min(12)
-    .max(128)
-    .regex(/[a-z]/)
-    .regex(/[A-Z]/)
-    .regex(/[0-9]/)
-    .regex(/[^a-zA-Z0-9]/),
+  temporaryPassword: strongPasswordSchema,
 }).strict();
 
 const resetPasswordSchema = z.object({
   tenantId: z.uuid(),
-  temporaryPassword: z.string()
-    .min(12)
-    .max(128)
-    .regex(/[a-z]/)
-    .regex(/[A-Z]/)
-    .regex(/[0-9]/)
-    .regex(/[^a-zA-Z0-9]/),
+  temporaryPassword: strongPasswordSchema,
 }).strict();
 
 function isAuthorized(request: Request, secret: string) {

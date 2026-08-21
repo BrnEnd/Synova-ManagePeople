@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 
 export type TenantStatus = 'active' | 'inactive';
 
@@ -96,6 +96,7 @@ type ProvisioningDependencies = {
   generateId: () => string;
   now: () => Date;
   hashPassword?: (password: string) => Promise<{ salt: string; hash: string }>;
+  idempotencySecret: string;
 };
 
 export class IdempotencyConflictError extends Error {
@@ -109,16 +110,20 @@ function normalizeSlug(value: string) {
   return value.trim().toLowerCase();
 }
 
-function hashTenantRequest(name: string, slug: string) {
-  return createHash('sha256').update(JSON.stringify({ name, slug })).digest('hex');
+function fingerprint(secret: string, value: unknown) {
+  return createHmac('sha256', secret).update(JSON.stringify(value)).digest('hex');
 }
 
-function hashUserRequest(input: Pick<CreateUserCommand, 'tenantId' | 'email' | 'displayName' | 'role'>) {
-  return createHash('sha256').update(JSON.stringify(input)).digest('hex');
+function hashTenantRequest(secret: string, name: string, slug: string) {
+  return fingerprint(secret, { name, slug });
 }
 
-function hashPasswordResetRequest(tenantId: string, userId: string) {
-  return createHash('sha256').update(JSON.stringify({ tenantId, userId })).digest('hex');
+function hashUserRequest(secret: string, input: Pick<CreateUserCommand, 'tenantId' | 'email' | 'displayName' | 'role' | 'temporaryPassword'>) {
+  return fingerprint(secret, input);
+}
+
+function hashPasswordResetRequest(secret: string, tenantId: string, userId: string, temporaryPassword: string) {
+  return fingerprint(secret, { tenantId, userId, temporaryPassword });
 }
 
 export function createProvisioningModule(dependencies: ProvisioningDependencies) {
@@ -126,6 +131,7 @@ export function createProvisioningModule(dependencies: ProvisioningDependencies)
     async createTenant(command: CreateTenantCommand) {
       const name = command.name.trim();
       const slug = normalizeSlug(command.slug);
+      const requestHash = hashTenantRequest(dependencies.idempotencySecret, name, slug);
       const result = await dependencies.repository.createTenantIdempotently({
         tenant: {
           id: dependencies.generateId(),
@@ -135,10 +141,10 @@ export function createProvisioningModule(dependencies: ProvisioningDependencies)
           createdAt: dependencies.now(),
         },
         idempotencyKey: command.idempotencyKey,
-        requestHash: hashTenantRequest(name, slug),
+        requestHash,
       });
 
-      if (result.requestHash !== hashTenantRequest(name, slug)) {
+      if (result.requestHash !== requestHash) {
         throw new IdempotencyConflictError();
       }
 
@@ -157,13 +163,17 @@ export function createProvisioningModule(dependencies: ProvisioningDependencies)
         email,
         displayName,
         role: command.role,
+        temporaryPassword: command.temporaryPassword,
       };
       const password = await dependencies.hashPassword(command.temporaryPassword);
-      const requestHash = hashUserRequest(request);
+      const requestHash = hashUserRequest(dependencies.idempotencySecret, request);
       const result = await dependencies.repository.createUserIdempotently({
         user: {
           id: dependencies.generateId(),
-          ...request,
+          tenantId: request.tenantId,
+          email: request.email,
+          displayName: request.displayName,
+          role: request.role,
           status: 'active',
           mustChangePassword: true,
           createdAt: dependencies.now(),
@@ -188,7 +198,12 @@ export function createProvisioningModule(dependencies: ProvisioningDependencies)
         throw new Error('A função de hash de senha não foi configurada.');
       }
       const password = await dependencies.hashPassword(command.temporaryPassword);
-      const requestHash = hashPasswordResetRequest(command.tenantId, command.userId);
+      const requestHash = hashPasswordResetRequest(
+        dependencies.idempotencySecret,
+        command.tenantId,
+        command.userId,
+        command.temporaryPassword,
+      );
       const result = await dependencies.repository.resetPasswordIdempotently({
         tenantId: command.tenantId,
         userId: command.userId,

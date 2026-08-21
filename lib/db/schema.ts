@@ -72,8 +72,9 @@ export const idempotencyRecords = pgTable('idempotency_records', {
 
 export const loginAttempts = pgTable('login_attempts', {
   key: text('key').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   failures: integer('failures').notNull(),
   windowStartedAt: timestamp('window_started_at', { withTimezone: true, mode: 'date' }).notNull(),
   blockedUntil: timestamp('blocked_until', { withTimezone: true, mode: 'date' }),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
-});
+}, (table) => [index('login_attempts_tenant_updated_idx').on(table.tenantId, table.updatedAt)]);

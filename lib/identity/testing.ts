@@ -26,16 +26,21 @@ export class InMemoryIdentityRepository implements IdentityRepository {
     };
   }
 
-  async getLoginAttempt(key: string) {
-    return this.attempts.get(key) ?? null;
+  private attemptKey(tenantSlug: string, key: string) {
+    return `${tenantSlug}:${key}`;
   }
 
-  async saveLoginAttempt(key: string, attempt: LoginAttempt) {
-    this.attempts.set(key, attempt);
+  async getLoginAttempt(tenantSlug: string, key: string) {
+    return this.attempts.get(this.attemptKey(tenantSlug, key)) ?? null;
   }
 
-  async clearLoginAttempt(key: string) {
-    this.attempts.delete(key);
+  async saveLoginAttempt(tenantSlug: string, key: string, attempt: LoginAttempt, now: Date) {
+    void now;
+    this.attempts.set(this.attemptKey(tenantSlug, key), attempt);
+  }
+
+  async clearLoginAttempt(tenantSlug: string, key: string) {
+    this.attempts.delete(this.attemptKey(tenantSlug, key));
   }
 
   async markLoginSuccessful() {}

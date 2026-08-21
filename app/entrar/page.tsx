@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation';
 import { LoginForm } from '@/components/auth/login-form';
+import { identityDestination } from '@/lib/identity/destination';
 import { getCurrentIdentity } from '@/lib/identity/server';
 
 export default async function LoginPage() {
   const identity = await getCurrentIdentity();
-  if (identity) redirect(identity.mustChangePassword ? '/alterar-senha' : identity.role === 'manager' ? '/gestao' : '/portal');
+  if (identity) redirect(identityDestination(identity));
 
   return (
     <main className="grid min-h-screen lg:grid-cols-[minmax(0,1.1fr)_minmax(28rem,0.9fr)]">

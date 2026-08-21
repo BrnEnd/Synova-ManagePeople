@@ -8,6 +8,7 @@ describe('provisionamento', () => {
       repository: new InMemoryProvisioningRepository(),
       generateId: () => '2cd093b3-4d03-4b2b-80a5-f8ec8d7e0eb7',
       now: () => new Date('2026-08-20T12:00:00.000Z'),
+      idempotencySecret: 'test-idempotency-secret',
     });
 
     const first = await provisioning.createTenant({
@@ -39,6 +40,7 @@ describe('provisionamento', () => {
       repository: new InMemoryProvisioningRepository(),
       generateId: () => '2cd093b3-4d03-4b2b-80a5-f8ec8d7e0eb7',
       now: () => new Date('2026-08-20T12:00:00.000Z'),
+      idempotencySecret: 'test-idempotency-secret',
     });
 
     await provisioning.createTenant({
@@ -65,6 +67,7 @@ describe('provisionamento', () => {
       generateId: () => ids.shift()!,
       now: () => new Date('2026-08-20T12:00:00.000Z'),
       hashPassword: async () => ({ salt: 'salt', hash: 'derived-hash' }),
+      idempotencySecret: 'test-idempotency-secret',
     });
     const { tenant } = await provisioning.createTenant({
       name: 'Synova',
@@ -109,6 +112,7 @@ describe('provisionamento', () => {
       generateId: () => ids.shift()!,
       now: () => new Date('2026-08-20T12:00:00.000Z'),
       hashPassword: async (password) => ({ salt: `${password}-salt`, hash: `${password}-hash` }),
+      idempotencySecret: 'test-idempotency-secret',
     });
     const { tenant } = await provisioning.createTenant({ name: 'Synova', slug: 'synova', idempotencyKey: 'tenant' });
     const { user: created } = await provisioning.createUser({
@@ -131,5 +135,40 @@ describe('provisionamento', () => {
       user: { id: created.id, tenantId: tenant.id, mustChangePassword: true },
       replayed: false,
     });
+  });
+
+  test('rejeita a mesma chave quando a senha temporária muda', async () => {
+    const repository = new InMemoryProvisioningRepository();
+    const ids = [
+      '2cd093b3-4d03-4b2b-80a5-f8ec8d7e0eb7',
+      '07050f2f-4fef-47f0-b903-a873b7922e08',
+      '91e1190c-0fcc-4b60-aadd-bd01cd6dcf13',
+    ];
+    const provisioning = createProvisioningModule({
+      repository,
+      generateId: () => ids.shift()!,
+      now: () => new Date('2026-08-20T12:00:00.000Z'),
+      hashPassword: async (password) => ({ salt: `${password}-salt`, hash: `${password}-hash` }),
+      idempotencySecret: 'test-idempotency-secret',
+    });
+    const { tenant } = await provisioning.createTenant({ name: 'Synova', slug: 'synova', idempotencyKey: 'tenant' });
+
+    await provisioning.createUser({
+      tenantId: tenant.id,
+      email: 'gestao@synova.com',
+      displayName: 'Gestão Synova',
+      role: 'manager',
+      temporaryPassword: 'Synova#2026!Inicial',
+      idempotencyKey: 'user',
+    });
+
+    await expect(provisioning.createUser({
+      tenantId: tenant.id,
+      email: 'gestao@synova.com',
+      displayName: 'Gestão Synova',
+      role: 'manager',
+      temporaryPassword: 'Outra#2026!Senha',
+      idempotencyKey: 'user',
+    })).rejects.toBeInstanceOf(IdempotencyConflictError);
   });
 });
