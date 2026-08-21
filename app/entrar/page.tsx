@@ -14,11 +14,8 @@ export default async function LoginPage() {
         <div className="max-w-2xl pb-[12vh]">
           <p className="text-xs font-black uppercase tracking-[0.22em] text-orange-400">Portal de funcionários</p>
           <h1 className="mt-5 text-5xl font-black leading-[1.04] tracking-[-0.04em] text-white xl:text-6xl">
-            Da competência ao pagamento, tudo em um só lugar.
+            Bem-vindo à Synova.
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-8 text-zinc-400">
-            Gestão operacional, documentos e histórico financeiro com segurança desde o primeiro acesso.
-          </p>
         </div>
         <p className="text-sm text-zinc-600">Uso interno Synova</p>
       </section>
