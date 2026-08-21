@@ -6,6 +6,7 @@ export type Competence = {
   revision: number; submittedAt: Date | null; approvedAt: Date | null; approvedByUserId: string | null;
   approvedMinutes: number | null; hourlyRateCents: number | null; approvedAmountCents: number | null;
   adjustmentReason: string | null; createdAt: Date; updatedAt: Date;
+  forecastDocumentId: string | null; invoiceDocumentId: string | null;
 };
 export type CompetenceDetail = { competence: Competence; entries: TimeEntry[] };
 

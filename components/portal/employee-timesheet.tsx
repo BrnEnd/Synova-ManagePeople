@@ -1,11 +1,12 @@
 'use client';
 
+import { upload } from '@vercel/blob/client';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 type Entry = { id: string; workDate: string; minutes: number; observation: string | null };
 type CompetenceData = {
-  competence: { id: string; referenceMonth: string; clientName: string; managerName: string; status: string; totalMinutes: number; adjustmentReason: string | null };
+  competence: { id: string; tenantId: string; employeeId: string; referenceMonth: string; clientName: string; managerName: string; status: string; totalMinutes: number; adjustmentReason: string | null; forecastDocumentId: string | null; invoiceDocumentId: string | null };
   entries: Entry[];
 };
 
@@ -17,7 +18,7 @@ const hours = (minutes: number) => `${Math.floor(minutes / 60)}h${minutes % 60 ?
 const decimalHours = (minutes: number) => (minutes / 60).toFixed(2).replace(/\.00$/, '');
 const monthLabel = (reference: string) => new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${reference}T00:00:00Z`));
 
-export function EmployeeTimesheet({ detail, history, notifications }: { detail: CompetenceData; history: Array<{ id: string; referenceMonth: string; totalMinutes: number; status: string }>; notifications: Array<{ id: string; title: string; message: string; readAt: string | null; createdAt: string }> }) {
+export function EmployeeTimesheet({ detail, history, notifications, blobEnabled, payment }: { detail: CompetenceData; history: Array<{ id: string; referenceMonth: string; totalMinutes: number; status: string }>; notifications: Array<{ id: string; title: string; message: string; readAt: string | null; createdAt: string }>; blobEnabled: boolean; payment: { amountCents: number; paidAt: string; receiptDocumentId: string } | null }) {
   const { competence, entries } = detail;
   const router = useRouter();
   const editable = competence.status === 'filling' || competence.status === 'adjustments_requested';
@@ -53,6 +54,24 @@ export function EmployeeTimesheet({ detail, history, notifications }: { detail: 
     finally { setBusy(''); }
   }
 
+  async function sendInvoice(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy('invoice'); setFeedback({}); const formElement = event.currentTarget; const form = new FormData(formElement); const file = form.get('file');
+    if (!(file instanceof File) || !file.size) { setFeedback({ error: 'Selecione a Nota Fiscal.' }); setBusy(''); return; }
+    try {
+      if (blobEnabled) {
+        const originalName = file.name;
+        const blobPath = `tenants/${competence.tenantId}/employees/${competence.employeeId}/competencies/${competence.id}/${crypto.randomUUID()}-${originalName.replace(/[^a-zA-Z0-9._-]+/g, '-')}`;
+        const blob = await upload(blobPath, file, { access: 'private', handleUploadUrl: '/api/documents/upload', multipart: file.size > 5 * 1024 * 1024, clientPayload: JSON.stringify({ employeeId: competence.employeeId, competenceId: competence.id, type: 'invoice', originalName }) });
+        const completion = await fetch('/api/documents/complete', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ employeeId: competence.employeeId, competenceId: competence.id, type: 'invoice', originalName, pathname: blob.pathname }) });
+        const body = await completion.json() as { error?: string };
+        if (!completion.ok) throw new Error(body.error || 'Não foi possível concluir a Nota Fiscal.');
+      }
+      else { const response = await fetch(`/api/portal/competencies/${competence.id}/invoice`, { method: 'POST', body: form }); const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || 'Não foi possível enviar a Nota Fiscal.'); }
+      formElement.reset(); setFeedback({ success: 'Nota Fiscal enviada. A competência aguarda pagamento.' }); router.refresh();
+    } catch (error) { setFeedback({ error: error instanceof Error ? error.message : 'Não foi possível enviar a Nota Fiscal.' }); }
+    finally { setBusy(''); }
+  }
+
   return <div className="mx-auto max-w-7xl px-5 py-8 md:px-10 md:py-12">
     <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
       <div><p className="text-xs font-black uppercase tracking-[0.2em] text-orange-400">Competência atual</p><h1 className="mt-2 text-3xl font-black capitalize tracking-[-0.04em] text-white md:text-4xl">{monthLabel(competence.referenceMonth)}</h1><p className="mt-2 text-zinc-400">{competence.clientName} · Gestor: {competence.managerName}</p></div>
@@ -60,6 +79,9 @@ export function EmployeeTimesheet({ detail, history, notifications }: { detail: 
     </div>
 
     {competence.adjustmentReason && <div className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4"><p className="text-sm font-black text-amber-200">Ajustes solicitados</p><p className="mt-1 text-sm text-amber-100/80">{competence.adjustmentReason}</p></div>}
+    {competence.forecastDocumentId && <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/8 p-4"><div><p className="font-black text-emerald-200">Previsão de pagamento disponível</p><p className="mt-1 text-sm text-zinc-400">Gerada a partir dos valores congelados na aprovação.</p></div><a className="button-secondary" href={`/api/documents/${competence.forecastDocumentId}/download`}>Baixar PDF</a></div>}
+    {competence.status === 'awaiting_invoice' && <form className="mt-5 grid gap-3 rounded-2xl border border-orange-400/20 bg-orange-400/8 p-4 sm:grid-cols-[1fr_auto] sm:items-end" onSubmit={sendInvoice}><label className="text-sm font-bold text-zinc-300">Enviar Nota Fiscal<input accept="application/pdf,image/jpeg,image/png,image/webp" className="field mt-2" name="file" required type="file" /></label><button className="button-primary" disabled={Boolean(busy)}>{busy === 'invoice' ? 'Enviando…' : 'Enviar Nota Fiscal'}</button></form>}
+    {payment && <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/8 p-4"><div><p className="font-black text-emerald-200">Pagamento realizado · {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(payment.amountCents / 100)}</p><p className="mt-1 text-sm text-zinc-400">{new Intl.DateTimeFormat('pt-BR').format(new Date(payment.paidAt))}</p></div><a className="button-secondary" href={`/api/documents/${payment.receiptDocumentId}/download`}>Baixar comprovante</a></div>}
 
     <div aria-live="polite" className="mt-5">{feedback.success && <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">{feedback.success}</p>}{feedback.error && <p className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300" role="alert">{feedback.error}</p>}</div>
 

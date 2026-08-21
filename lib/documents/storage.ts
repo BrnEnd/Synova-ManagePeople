@@ -1,7 +1,7 @@
 import 'server-only';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
-import { get, head } from '@vercel/blob';
+import { get, head, put } from '@vercel/blob';
 
 const localRoot = resolve(process.cwd(), '.data', 'uploads');
 
@@ -30,6 +30,11 @@ export async function writeLocalDocument(pathname: string, bytes: Uint8Array) {
   const target = localPath(pathname);
   await mkdir(resolve(target, '..'), { recursive: true });
   await writeFile(target, bytes);
+}
+
+export async function writeGeneratedDocument(pathname: string, bytes: Uint8Array, contentType: string) {
+  if (!isBlobStorageConfigured()) return writeLocalDocument(pathname, bytes);
+  await put(pathname, Buffer.from(bytes), { access: 'private', contentType, addRandomSuffix: false });
 }
 
 export async function documentMetadata(pathname: string) {

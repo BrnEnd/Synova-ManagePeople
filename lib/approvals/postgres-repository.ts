@@ -15,6 +15,7 @@ const selection = {
   approvedByUserId: competencies.approvedByUserId, approvedMinutes: competencies.approvedMinutes,
   hourlyRateCents: competencies.hourlyRateCents, approvedAmountCents: competencies.approvedAmountCents,
   adjustmentReason: competencies.adjustmentReason, createdAt: competencies.createdAt, updatedAt: competencies.updatedAt,
+  forecastDocumentId: competencies.forecastDocumentId, invoiceDocumentId: competencies.invoiceDocumentId,
 };
 
 async function managerReview(tx: DatabaseTransaction, tenantId: string, managerUserId: string, competenceId: string): Promise<CompetenceReview | null> {
@@ -55,7 +56,7 @@ export class PostgresApprovalRepository implements ApprovalRepository {
 
   listForManager(tenantId: string, managerUserId: string) {
     return withTenantTransaction(tenantId, async (tx) => {
-      const rows = await tx.select({ id: competencies.id }).from(competencies).where(and(eq(competencies.tenantId, tenantId), eq(competencies.managerUserId, managerUserId), eq(competencies.status, 'awaiting_approval'))).orderBy(asc(competencies.submittedAt));
+      const rows = await tx.select({ id: competencies.id }).from(competencies).where(and(eq(competencies.tenantId, tenantId), eq(competencies.managerUserId, managerUserId), inArray(competencies.status, ['awaiting_approval', 'awaiting_payment']))).orderBy(asc(competencies.submittedAt));
       return Promise.all(rows.map((row) => managerReview(tx, tenantId, managerUserId, row.id))) as Promise<CompetenceReview[]>;
     });
   }

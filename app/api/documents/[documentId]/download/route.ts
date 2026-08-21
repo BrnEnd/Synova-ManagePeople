@@ -1,17 +1,17 @@
 import { getDocumentsModule } from '@/lib/documents/server';
 import { readDocument } from '@/lib/documents/storage';
 import { managerAccess, managerAccessResponse } from '@/lib/identity/access';
+import { getEmployeesModule } from '@/lib/employees/server';
 import { getCurrentIdentity } from '@/lib/identity/server';
 
 export async function GET(_request: Request, context: RouteContext<'/api/documents/[documentId]/download'>) {
   const identity = await getCurrentIdentity();
-  const access = managerAccess(identity);
-  if (access !== 'allowed' || !identity) {
-    return managerAccessResponse(access === 'allowed' ? 'unauthenticated' : access);
-  }
+  if (!identity) return managerAccessResponse('unauthenticated');
+  if (identity.mustChangePassword) return managerAccessResponse('password_change_required');
   const { documentId } = await context.params;
-  const document = await getDocumentsModule().get(identity.tenantId, documentId);
-  if (!document) return Response.json({ error: 'Documento não encontrado.' }, { status: 404 });
+    const document = await getDocumentsModule().get(identity.tenantId, documentId);
+    if (!document) return Response.json({ error: 'Documento não encontrado.' }, { status: 404 });
+    if (managerAccess(identity) !== 'allowed') { const employee = await getEmployeesModule().get(identity.tenantId, document.employeeId); if (identity.role !== 'employee' || employee?.userId !== identity.id) return managerAccessResponse('forbidden'); }
   try {
     const content = await readDocument(document.pathname);
     if (!content) return Response.json({ error: 'Arquivo não encontrado no storage.' }, { status: 404 });

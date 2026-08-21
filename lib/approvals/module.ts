@@ -19,11 +19,12 @@ export type ApprovalRepository = {
 
 export class InvalidApprovalError extends Error { constructor(message: string) { super(message); this.name = 'InvalidApprovalError'; } }
 
-export function createApprovalsModule(dependencies: { repository: ApprovalRepository; generateId: () => string; now: () => Date }) {
+export function createApprovalsModule(dependencies: { repository: ApprovalRepository; generateId: () => string; now: () => Date; generateForecast?: (tenantId: string, competenceId: string) => Promise<unknown> }) {
   return {
     async submit(command: { tenantId: string; userId: string; competenceId: string }) {
       const review = await dependencies.repository.submit(command.tenantId, command.userId, command.competenceId, dependencies.generateId(), dependencies.generateId(), dependencies.now());
-      if (!review) throw new Error('Competência não encontrada.'); return review;
+      if (!review) throw new Error('Competência não encontrada.');
+      return review;
     },
     listForManager(tenantId: string, managerUserId: string) { return dependencies.repository.listForManager(tenantId, managerUserId); },
     async getForManager(tenantId: string, managerUserId: string, competenceId: string) {
@@ -37,7 +38,9 @@ export function createApprovalsModule(dependencies: { repository: ApprovalReposi
     },
     async approve(command: { tenantId: string; managerUserId: string; competenceId: string }) {
       const review = await dependencies.repository.approve(command.tenantId, command.managerUserId, command.competenceId, dependencies.generateId(), dependencies.generateId(), dependencies.now());
-      if (!review) throw new Error('Competência não encontrada.'); return review;
+      if (!review) throw new Error('Competência não encontrada.');
+      await dependencies.generateForecast?.(command.tenantId, command.competenceId);
+      return review;
     },
     listNotifications(tenantId: string, userId: string) { return dependencies.repository.listNotifications(tenantId, userId); },
     async markNotificationRead(tenantId: string, userId: string, notificationId: string) {

@@ -81,3 +81,15 @@ _Evitar_: Status sobrescrito sem histórico
 **Notificação**:
 Pendência interna direcionada a um Usuário e protegida contra duplicação pelo evento que a originou.
 _Evitar_: E-mail, evento de auditoria
+
+**Previsão de pagamento**:
+PDF imutável gerado a partir dos minutos, valor-hora e total congelados quando a Competência é aprovada.
+_Evitar_: Simulação recalculada, valor editável
+
+**Nota Fiscal**:
+Documento enviado pelo Funcionário para uma Competência aprovada, necessário para liberar o registro do pagamento.
+_Evitar_: Previsão de pagamento, comprovante
+
+**Pagamento**:
+Confirmação gerencial do pagamento externo, com data, observação opcional, valor congelado e comprovante obrigatório.
+_Evitar_: Transferência bancária automática, valor manual

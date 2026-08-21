@@ -216,3 +216,24 @@ curl -b synova-employee-session.txt "$APP_URL/api/notifications"
 ```
 
 O job `/api/internal/jobs/month-close-reminders` exige `Authorization: Bearer $CRON_SECRET`. A configuração da Vercel chama a rota diariamente às 12:00 UTC; a aplicação só gera lembretes no último dia útil nacional, considerando a data em `America/Sao_Paulo`.
+
+## Nota Fiscal e pagamento via CLI
+
+Depois da aprovação, o funcionário baixa a previsão e envia a Nota Fiscal. Em ambiente local, o exemplo usa multipart; com Vercel Blob configurado, a interface faz upload direto e conclui o registro pelas rotas de documentos.
+
+```bash
+curl -b synova-employee-session.txt -o previsao.pdf \
+  "$APP_URL/api/documents/<FORECAST_DOCUMENT_ID>/download"
+
+curl -b synova-employee-session.txt -X POST \
+  "$APP_URL/api/portal/competencies/<COMPETENCE_ID>/invoice" \
+  -F 'file=@nota-fiscal.pdf;type=application/pdf'
+
+curl -b synova-session.txt -X POST \
+  "$APP_URL/api/management/competencies/<COMPETENCE_ID>/payment" \
+  -F 'paidDate=2026-08-20' \
+  -F 'notes=Pagamento realizado externamente' \
+  -F 'file=@comprovante.pdf;type=application/pdf'
+```
+
+O valor do pagamento não é recebido pela API: ele é sempre recuperado da fotografia congelada na aprovação.

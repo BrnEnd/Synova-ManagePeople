@@ -10,17 +10,20 @@ import { documentMetadata } from '@/lib/documents/storage';
 import { getEmployeesModule } from '@/lib/employees/server';
 import { managerAccess } from '@/lib/identity/access';
 import { getCurrentIdentity } from '@/lib/identity/server';
+import { getFinanceModule } from '@/lib/finance/server';
 
 const payloadSchema = z.object({
   employeeId: z.uuid(),
-  type: z.enum(['identification', 'address_proof', 'other']),
+  type: z.enum(['identification', 'address_proof', 'contract', 'invoice', 'payment_receipt', 'other']),
   originalName: z.string().trim().min(1).max(255),
+  competenceId: z.uuid().optional(),
 }).strict();
 
 const tokenPayloadSchema = payloadSchema.extend({
   tenantId: z.uuid(),
   actorUserId: z.uuid(),
   pathname: z.string().min(1),
+  origin: z.enum(['manager', 'employee']),
 }).strict();
 
 export async function POST(request: Request) {
@@ -31,11 +34,18 @@ export async function POST(request: Request) {
       body,
       onBeforeGenerateToken: async (pathname, clientPayload) => {
         const identity = await getCurrentIdentity();
-        if (managerAccess(identity) !== 'allowed' || !identity) throw new Error('Não autorizado.');
+        if (!identity || identity.mustChangePassword) throw new Error('Não autorizado.');
         const parsed = payloadSchema.safeParse(clientPayload ? JSON.parse(clientPayload) : null);
         if (!parsed.success) throw new Error('Contexto do documento inválido.');
-        const employee = await getEmployeesModule().get(identity.tenantId, parsed.data.employeeId);
-        if (!employee) throw new Error('Funcionário não encontrado.');
+        if (managerAccess(identity) === 'allowed') {
+          if (parsed.data.type === 'invoice') throw new Error('A Nota Fiscal deve ser enviada pelo funcionário.');
+          const employee = await getEmployeesModule().get(identity.tenantId, parsed.data.employeeId);
+          if (!employee) throw new Error('Funcionário não encontrado.');
+        } else {
+          if (identity.role !== 'employee' || parsed.data.type !== 'invoice' || !parsed.data.competenceId) throw new Error('Não autorizado.');
+          const context = await getFinanceModule().invoiceContext(identity.tenantId, identity.id, parsed.data.competenceId);
+          if (context.employeeId !== parsed.data.employeeId) throw new Error('Contexto do documento inválido.');
+        }
         const prefix = documentPathPrefix(identity.tenantId, parsed.data.employeeId);
         if (!pathname.startsWith(prefix)) throw new Error('Caminho do documento inválido.');
         return {
@@ -48,6 +58,7 @@ export async function POST(request: Request) {
             tenantId: identity.tenantId,
             actorUserId: identity.id,
             pathname,
+            origin: identity.role,
           }),
         };
       },
@@ -63,7 +74,7 @@ export async function POST(request: Request) {
           employeeId: parsed.data.employeeId,
           actorUserId: parsed.data.actorUserId,
           type: parsed.data.type,
-          origin: 'manager',
+          origin: parsed.data.origin,
           originalName: parsed.data.originalName,
           ...metadata,
         });

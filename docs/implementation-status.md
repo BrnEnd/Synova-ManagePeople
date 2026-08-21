@@ -4,28 +4,34 @@ Este arquivo é o ponto de retomada operacional da V1 descrita no issue GitHub #
 
 ## Checkpoint atual
 
-**Etapa 5 — Aprovação, ajustes, calendário e notificações** (`codex/complete-v1`, commit desta etapa)
+**Etapa 6 — Previsão PDF, Nota Fiscal e pagamento** (`codex/complete-v1`, commit desta etapa)
 
 Entregue nesta etapa:
 
-- envio e reenvio explícitos da competência pelo funcionário;
-- fila e revisão detalhada exclusivas do gestor responsável;
-- aprovação ou devolução obrigatoriamente motivada, com máquina de estados;
-- eventos imutáveis, revisão e notificações internas idempotentes;
-- fotografia de minutos, valor-hora e valor devido no momento da aprovação;
-- último dia útil nacional com `date-holidays`, fuso de São Paulo e cron autenticado;
-- indicador navegável no dashboard e telas do fluxo para gestor e funcionário.
+- previsão de pagamento em PDF gerada automaticamente da fotografia aprovada e vinculada sem sobrescrita;
+- download privado da previsão pelo funcionário e pela gestão;
+- envio de Nota Fiscal em PDF ou imagem pelo funcionário, com limite de 25 MB;
+- fila de pagamento e registro gerencial com data, observação e comprovante obrigatório;
+- valor pago invariavelmente igual ao valor congelado (`valor-hora × horas aprovadas`);
+- evento, notificação e encerramento transacionais da competência;
+- armazenamento privado em Vercel Blob e fallback local exclusivo de desenvolvimento.
 
 Validação desta etapa:
 
-- typecheck, lint e 60 testes unitários aprovados;
+- typecheck, lint e 63 testes unitários aprovados;
 - migrações completas em PostgreSQL vazio e integração com roles restritas aprovada;
-- isolamento RLS de eventos e notificações;
-- smoke HTTP de envio, devolução, correção, reenvio, aprovação, fotografia financeira e notificações.
+- isolamento RLS de pagamentos e documentos financeiros;
+- smoke HTTP de aprovação, PDF válido, Nota Fiscal, pagamento pelo valor congelado e comprovante.
 
 Os dados e o banco sintéticos foram removidos.
 
 ## Checkpoint anterior
+
+**Etapa 5 — Aprovação, ajustes, calendário e notificações** (`ab13b73`)
+
+Entregou envio, revisão, ajustes, aprovação, fotografia financeira, eventos, notificações e lembretes no último dia útil nacional.
+
+## Checkpoint anterior à etapa 5
 
 **Etapa 4 — Competências e apontamentos** (`e03ac35`)
 
@@ -118,12 +124,11 @@ Os recursos sintéticos do smoke e o banco temporário foram removidos. O banco 
 
 ## Próxima etapa
 
-**Etapa 6 — Previsão PDF, Nota Fiscal e pagamento**
+**Etapa 7 — Portal do funcionário, dashboards e E2E completo**
 
-Gerar a previsão de pagamento em PDF, receber a Nota Fiscal e permitir que a gestão registre pagamento e comprovante até o encerramento da competência.
+Completar os indicadores navegáveis, o histórico financeiro do funcionário e a cobertura ponta a ponta do fluxo integral.
 
 ## Etapas restantes
 
-1. Etapa 6 — Previsão PDF, Nota Fiscal e pagamento.
-2. Etapa 7 — Portal do funcionário, dashboards e E2E completo.
-3. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.
+1. Etapa 7 — Portal do funcionário, dashboards e E2E completo.
+2. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.

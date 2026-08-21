@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createTimekeepingModule, InvalidTimekeepingError, MissingAllocationError, type CompetenceDetail, type TimekeepingRepository } from '@/lib/timekeeping/module';
 
 const baseDetail: CompetenceDetail = {
-  competence: { id: 'competence-a', tenantId: 'tenant-a', employeeId: 'employee-a', allocationId: 'allocation-a', clientId: 'client-a', managerUserId: 'manager-a', clientName: 'Cliente A', managerName: 'Gestor A', referenceMonth: '2026-08-01', status: 'filling', totalMinutes: 0, revision: 1, submittedAt: null, approvedAt: null, approvedByUserId: null, approvedMinutes: null, hourlyRateCents: null, approvedAmountCents: null, adjustmentReason: null, createdAt: new Date(), updatedAt: new Date() },
+  competence: { id: 'competence-a', tenantId: 'tenant-a', employeeId: 'employee-a', allocationId: 'allocation-a', clientId: 'client-a', managerUserId: 'manager-a', clientName: 'Cliente A', managerName: 'Gestor A', referenceMonth: '2026-08-01', status: 'filling', totalMinutes: 0, revision: 1, submittedAt: null, approvedAt: null, approvedByUserId: null, approvedMinutes: null, hourlyRateCents: null, approvedAmountCents: null, adjustmentReason: null, forecastDocumentId: null, invoiceDocumentId: null, createdAt: new Date(), updatedAt: new Date() },
   entries: [],
 };
 

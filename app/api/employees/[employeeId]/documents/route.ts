@@ -10,7 +10,7 @@ import { isBlobStorageConfigured, safeDocumentName, writeLocalDocument } from '@
 import { managerAccess, managerAccessResponse } from '@/lib/identity/access';
 import { getCurrentIdentity } from '@/lib/identity/server';
 
-const typeSchema = z.enum(['identification', 'address_proof', 'other']);
+const typeSchema = z.enum(['identification', 'address_proof', 'contract', 'payment_receipt', 'other']);
 
 export async function POST(request: Request, context: RouteContext<'/api/employees/[employeeId]/documents'>) {
   const identity = await getCurrentIdentity();

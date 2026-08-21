@@ -31,6 +31,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { PostgresTimekeepingRepository },
       { createApprovalsModule },
       { PostgresApprovalRepository },
+      { createFinanceModule },
+      { PostgresFinanceRepository },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
@@ -52,6 +54,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       import('@/lib/timekeeping/postgres-repository'),
       import('@/lib/approvals/module'),
       import('@/lib/approvals/postgres-repository'),
+      import('@/lib/finance/module'),
+      import('@/lib/finance/postgres-repository'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
@@ -229,6 +233,16 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       await expect(approvals.getForManager(otherTenant.tenant.id, userResult.user.id, competence.competence.id)).rejects.toThrow('Competência não encontrada.');
       await expect(approvals.listNotifications(tenantId, employeeUserResult.user.id)).resolves.toHaveLength(2);
 
+      const finance = createFinanceModule({ repository: new PostgresFinanceRepository(), documents: documentsModule, writeDocument: async () => undefined, generateId: randomUUID, now: () => new Date() });
+      const forecastDocumentId = await finance.ensureForecast(tenantId, competence.competence.id);
+      const invoiceDocument = await documentsModule.recordUpload({ tenantId, employeeId: employee.id, actorUserId: employeeUserResult.user.id, type: 'invoice', origin: 'employee', originalName: 'nota-fiscal.pdf', pathname: `tenants/${tenantId}/employees/${employee.id}/${randomUUID()}-nf.pdf`, mimeType: 'application/pdf', size: 1024 });
+      await finance.linkInvoice({ tenantId, userId: employeeUserResult.user.id, competenceId: competence.competence.id, documentId: invoiceDocument.document.id });
+      const receiptDocument = await documentsModule.recordUpload({ tenantId, employeeId: employee.id, actorUserId: userResult.user.id, type: 'payment_receipt', origin: 'manager', originalName: 'comprovante.pdf', pathname: `tenants/${tenantId}/employees/${employee.id}/${randomUUID()}-comprovante.pdf`, mimeType: 'application/pdf', size: 1024 });
+      const payment = await finance.recordPayment({ tenantId, managerUserId: userResult.user.id, competenceId: competence.competence.id, receiptDocumentId: receiptDocument.document.id, notes: 'Pago via integração' });
+      expect(payment).toMatchObject({ amountCents: 95_000, receiptDocumentId: receiptDocument.document.id });
+      await expect(finance.getForecastData(tenantId, competence.competence.id)).resolves.toMatchObject({ forecastDocumentId });
+      await expect(timekeeping.get(tenantId, employeeUserResult.user.id, competence.competence.id)).resolves.toMatchObject({ competence: { status: 'paid', invoiceDocumentId: invoiceDocument.document.id, forecastDocumentId } });
+
       const rawServiceKey = `service-key-${randomUUID()}-${randomUUID()}`;
       await provisioning.createServiceKey({
         tenantId,
@@ -280,7 +294,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         const other = await transaction<{ count: string }[]>`select count(*)::text as count from documents`;
         return { own: Number(own[0].count), other: Number(other[0].count) };
       });
-      expect(documentVisibility).toEqual({ own: 2, other: 0 });
+      expect(documentVisibility).toEqual({ own: 5, other: 0 });
 
       const clientVisibility = await normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
@@ -324,7 +338,16 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         const other = await transaction<{ total: string }[]>`select ((select count(*) from competence_events) + (select count(*) from notifications))::text as total`;
         return { own: own[0], other: Number(other[0].total) };
       });
-      expect(workflowVisibility).toEqual({ own: { events: '4', notifications: '4' }, other: 0 });
+      expect(workflowVisibility).toEqual({ own: { events: '6', notifications: '6' }, other: 0 });
+
+      const paymentVisibility = await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        const own = await transaction<{ count: string }[]>`select count(*)::text as count from payments`;
+        await transaction`select set_config('app.tenant_id', ${otherTenant.tenant.id}, true)`;
+        const other = await transaction<{ count: string }[]>`select count(*)::text as count from payments`;
+        return { own: Number(own[0].count), other: Number(other[0].count) };
+      });
+      expect(paymentVisibility).toEqual({ own: 1, other: 0 });
 
       await expect(normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
@@ -441,6 +464,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         'competence.submitted',
         'competence.adjustments_requested',
         'competence.approved',
+        'competence.invoice_submitted',
+        'competence.payment_recorded',
         'service_key.created',
         'employee.external_pre_registered',
         'user.logged_in',
@@ -451,6 +476,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
           await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
           await transaction`delete from login_attempts where tenant_id = ${tenantId}`;
           await transaction`delete from employee_notes where tenant_id = ${tenantId}`;
+          await transaction`delete from payments where tenant_id = ${tenantId}`;
           await transaction`delete from notifications where tenant_id = ${tenantId}`;
           await transaction`delete from competence_events where tenant_id = ${tenantId}`;
           await transaction`delete from time_entries where tenant_id = ${tenantId}`;

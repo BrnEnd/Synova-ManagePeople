@@ -308,6 +308,8 @@ export const competencies = pgTable('competencies', {
   hourlyRateCents: integer('hourly_rate_cents'),
   approvedAmountCents: integer('approved_amount_cents'),
   adjustmentReason: text('adjustment_reason'),
+  forecastDocumentId: uuid('forecast_document_id'),
+  invoiceDocumentId: uuid('invoice_document_id'),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (table) => [
@@ -319,6 +321,8 @@ export const competencies = pgTable('competencies', {
   foreignKey({ columns: [table.tenantId, table.clientId], foreignColumns: [clients.tenantId, clients.id], name: 'competencies_tenant_client_fk' }),
   foreignKey({ columns: [table.tenantId, table.managerUserId], foreignColumns: [users.tenantId, users.id], name: 'competencies_tenant_manager_fk' }),
   foreignKey({ columns: [table.tenantId, table.approvedByUserId], foreignColumns: [users.tenantId, users.id], name: 'competencies_tenant_approver_fk' }),
+  foreignKey({ columns: [table.tenantId, table.forecastDocumentId], foreignColumns: [documents.tenantId, documents.id], name: 'competencies_tenant_forecast_document_fk' }),
+  foreignKey({ columns: [table.tenantId, table.invoiceDocumentId], foreignColumns: [documents.tenantId, documents.id], name: 'competencies_tenant_invoice_document_fk' }),
   check('competencies_month_first_day_check', sql`extract(day from ${table.referenceMonth}) = 1`),
   check('competencies_total_nonnegative_check', sql`${table.totalMinutes} >= 0`),
 ]);
@@ -356,6 +360,28 @@ export const notifications = pgTable('notifications', {
   index('notifications_tenant_recipient_created_idx').on(table.tenantId, table.recipientUserId, table.createdAt),
   foreignKey({ columns: [table.tenantId, table.recipientUserId], foreignColumns: [users.tenantId, users.id], name: 'notifications_tenant_recipient_fk' }),
   foreignKey({ columns: [table.tenantId, table.competenceId], foreignColumns: [competencies.tenantId, competencies.id], name: 'notifications_tenant_competence_fk' }),
+]);
+
+export const payments = pgTable('payments', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  competenceId: uuid('competence_id').notNull(),
+  employeeId: uuid('employee_id').notNull(),
+  amountCents: integer('amount_cents').notNull(),
+  paidAt: timestamp('paid_at', { withTimezone: true, mode: 'date' }).notNull(),
+  notes: text('notes'),
+  receiptDocumentId: uuid('receipt_document_id').notNull(),
+  recordedByUserId: uuid('recorded_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('payments_tenant_id_id_unique').on(table.tenantId, table.id),
+  uniqueIndex('payments_competence_unique').on(table.tenantId, table.competenceId),
+  index('payments_tenant_paid_at_idx').on(table.tenantId, table.paidAt),
+  foreignKey({ columns: [table.tenantId, table.competenceId], foreignColumns: [competencies.tenantId, competencies.id], name: 'payments_tenant_competence_fk' }),
+  foreignKey({ columns: [table.tenantId, table.employeeId], foreignColumns: [employees.tenantId, employees.id], name: 'payments_tenant_employee_fk' }),
+  foreignKey({ columns: [table.tenantId, table.receiptDocumentId], foreignColumns: [documents.tenantId, documents.id], name: 'payments_tenant_receipt_document_fk' }),
+  foreignKey({ columns: [table.tenantId, table.recordedByUserId], foreignColumns: [users.tenantId, users.id], name: 'payments_tenant_recorder_fk' }),
+  check('payments_amount_positive_check', sql`${table.amountCents} > 0`),
 ]);
 
 export const timeEntries = pgTable('time_entries', {
