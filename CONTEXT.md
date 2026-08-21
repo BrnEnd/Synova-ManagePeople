@@ -45,3 +45,7 @@ _Evitar_: Anexo público, URL solta
 **Anotação gerencial**:
 Registro textual imutável no histórico de um Funcionário, com autor e horário. Complementa eventos automáticos sem substituí-los.
 _Evitar_: Campo de observação sobrescrito
+
+**Cliente**:
+Organização atendida pela Synova e referenciada por Alocações. Possui identidade, contatos e situação próprios; não é texto livre no Funcionário.
+_Evitar_: Projeto, alocação, tenant

@@ -4,7 +4,28 @@ Este arquivo é o ponto de retomada operacional da V1 descrita no issue GitHub #
 
 ## Checkpoint atual
 
-**Etapa 1 — Funcionários, onboarding e documentos** (`codex/complete-v1`, commit desta etapa)
+**Etapa 2 — Clientes** (`codex/complete-v1`, commit desta etapa)
+
+Entregue nesta etapa:
+
+- Cliente multi-tenant com nome, razão social, CNPJ, contato, endereço e observações;
+- criação, consulta, edição e inativação sem exclusão histórica;
+- APIs operacionais autenticadas para UI e CLI;
+- auditoria, RLS e unicidade de CNPJ dentro do tenant;
+- listagem, detalhe e indicador navegável no dashboard.
+
+Validação desta etapa:
+
+- `npm run typecheck`, `npm run lint`, `npm test -- --run` — 45 testes passaram;
+- `npm run db:check` e migrações completas em PostgreSQL vazio;
+- integração com roles restritas e isolamento real de Cliente;
+- smoke HTTP de criação, edição, listagem, detalhe e inativação.
+
+Os dados sintéticos e o banco temporário foram removidos.
+
+## Checkpoint anterior
+
+**Etapa 1 — Funcionários, onboarding e documentos** (`0cc7663`)
 
 Entregue:
 
@@ -31,16 +52,15 @@ Os recursos sintéticos do smoke e o banco temporário foram removidos. O banco 
 
 ## Próxima etapa
 
-**Etapa 2 — Clientes**
+**Etapa 3 — Contratos, alocações e condições**
 
-Criar entidade multi-tenant de Cliente, cadastro/edição/listagem/inativação, contatos e observações; adicionar auditoria, RLS, testes, dashboard navegável e request interna de criação via CLI. Ao concluir, atualizar este arquivo e criar novo commit.
+Modelar contratos do Funcionário, Alocações históricas entre Funcionário e Cliente, gestor responsável e condições financeiras/comerciais com vigência. Nenhuma alteração poderá sobrescrever períodos anteriores.
 
 ## Etapas restantes
 
-1. Etapa 2 — Clientes.
-2. Etapa 3 — Contratos, alocações e condições financeiras/comerciais.
-3. Etapa 4 — Competências e apontamentos.
-4. Etapa 5 — Aprovação, ajustes, último dia útil e notificações.
-5. Etapa 6 — Previsão PDF, Nota Fiscal e pagamento.
-6. Etapa 7 — Portal do funcionário, dashboards e E2E completo.
-7. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.
+1. Etapa 3 — Contratos, alocações e condições financeiras/comerciais.
+2. Etapa 4 — Competências e apontamentos.
+3. Etapa 5 — Aprovação, ajustes, último dia útil e notificações.
+4. Etapa 6 — Previsão PDF, Nota Fiscal e pagamento.
+5. Etapa 7 — Portal do funcionário, dashboards e E2E completo.
+6. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.

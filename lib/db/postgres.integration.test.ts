@@ -23,6 +23,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { tenantForServiceKey },
       { createDocumentsModule },
       { PostgresDocumentRepository },
+      { createClientsModule },
+      { PostgresClientRepository },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
@@ -36,6 +38,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       import('@/lib/integrations/hiring/service-key-repository'),
       import('@/lib/documents/module'),
       import('@/lib/documents/postgres-repository'),
+      import('@/lib/clients/module'),
+      import('@/lib/clients/postgres-repository'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
@@ -154,6 +158,18 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         content: 'Anotação da integração',
       })).resolves.toMatchObject({ authorName: 'Gestão de integração' });
 
+      const clientsModule = createClientsModule({
+        repository: new PostgresClientRepository(), generateId: randomUUID, now: () => new Date(),
+      });
+      const client = await clientsModule.create({
+        tenantId, actorUserId: userResult.user.id,
+        profile: {
+          name: 'Cliente de integração', legalName: 'Cliente de integração Ltda', taxId: '12345678000190',
+          contactName: 'Contato', email: 'contato@cliente.integration', phone: null, address: null, observations: null,
+        },
+      });
+      await expect(clientsModule.get(otherTenant.tenant.id, client.id)).resolves.toBeNull();
+
       const rawServiceKey = `service-key-${randomUUID()}-${randomUUID()}`;
       await provisioning.createServiceKey({
         tenantId,
@@ -206,6 +222,15 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         return { own: Number(own[0].count), other: Number(other[0].count) };
       });
       expect(documentVisibility).toEqual({ own: 1, other: 0 });
+
+      const clientVisibility = await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        const own = await transaction<{ count: string }[]>`select count(*)::text as count from clients`;
+        await transaction`select set_config('app.tenant_id', ${otherTenant.tenant.id}, true)`;
+        const other = await transaction<{ count: string }[]>`select count(*)::text as count from clients`;
+        return { own: Number(own[0].count), other: Number(other[0].count) };
+      });
+      expect(clientVisibility).toEqual({ own: 1, other: 0 });
 
       await expect(normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
@@ -312,6 +337,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         'document.uploaded',
         'employee.updated',
         'employee.note_added',
+        'client.created',
         'service_key.created',
         'employee.external_pre_registered',
         'user.logged_in',
@@ -323,6 +349,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
           await transaction`delete from login_attempts where tenant_id = ${tenantId}`;
           await transaction`delete from employee_notes where tenant_id = ${tenantId}`;
           await transaction`delete from documents where tenant_id = ${tenantId}`;
+          await transaction`delete from clients where tenant_id = ${tenantId}`;
           await transaction`delete from external_hiring_records where tenant_id = ${tenantId}`;
           await transaction`delete from employees where tenant_id = ${tenantId}`;
         });

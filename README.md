@@ -122,3 +122,19 @@ curl -X POST "$APP_URL/api/external/v1/hirings" \
 ```
 
 Repetições equivalentes retornam o mesmo pré-cadastro. Reutilizar o identificador externo ou a chave idempotente com outro conteúdo retorna conflito, sem duplicar o funcionário.
+
+## Clientes via CLI
+
+Operações de clientes usam uma sessão de gestor e permanecem sob RLS. Autentique a CLI e reutilize o cookie somente no canal operacional:
+
+```bash
+curl -c synova-session.txt -X POST "$APP_URL/api/auth/session" \
+  -H "Content-Type: application/json" \
+  --data '{"tenantSlug":"<TENANT_SLUG>","email":"<GESTOR_EMAIL>","password":"<GESTOR_SENHA>"}'
+
+curl -b synova-session.txt -X POST "$APP_URL/api/clients" \
+  -H "Content-Type: application/json" \
+  --data '{"name":"<NOME>","legalName":"<RAZAO_SOCIAL>","taxId":"<CNPJ>","contactName":null,"email":null,"phone":null,"address":null,"observations":null}'
+```
+
+O arquivo de cookies contém uma sessão autenticada e deve ser eliminado ao terminar a operação.

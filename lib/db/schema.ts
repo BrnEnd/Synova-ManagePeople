@@ -27,6 +27,7 @@ export const documentType = pgEnum('document_type', [
   'other',
 ]);
 export const documentOrigin = pgEnum('document_origin', ['manager', 'employee', 'integration', 'generated']);
+export const clientStatus = pgEnum('client_status', ['active', 'inactive']);
 
 export const tenants = pgTable('tenants', {
   id: uuid('id').primaryKey(),
@@ -143,6 +144,36 @@ export const employeeNotes = pgTable('employee_notes', {
     foreignColumns: [users.tenantId, users.id],
     name: 'employee_notes_tenant_author_fk',
   }),
+]);
+
+export const clients = pgTable('clients', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  name: text('name').notNull(),
+  legalName: text('legal_name'),
+  taxId: text('tax_id'),
+  contactName: text('contact_name'),
+  email: text('email'),
+  phone: text('phone'),
+  address: jsonb('address').$type<{
+    street: string;
+    number?: string;
+    complement?: string;
+    district?: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  }>(),
+  observations: text('observations'),
+  status: clientStatus('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  inactivatedAt: timestamp('inactivated_at', { withTimezone: true, mode: 'date' }),
+}, (table) => [
+  uniqueIndex('clients_tenant_tax_id_unique').on(table.tenantId, table.taxId),
+  uniqueIndex('clients_tenant_id_id_unique').on(table.tenantId, table.id),
+  index('clients_tenant_status_name_idx').on(table.tenantId, table.status, table.name),
 ]);
 
 export const serviceKeys = pgTable('service_keys', {
