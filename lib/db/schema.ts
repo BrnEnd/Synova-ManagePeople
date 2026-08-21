@@ -301,6 +301,13 @@ export const competencies = pgTable('competencies', {
   status: competenceStatus('status').notNull().default('filling'),
   totalMinutes: integer('total_minutes').notNull().default(0),
   revision: integer('revision').notNull().default(1),
+  submittedAt: timestamp('submitted_at', { withTimezone: true, mode: 'date' }),
+  approvedAt: timestamp('approved_at', { withTimezone: true, mode: 'date' }),
+  approvedByUserId: uuid('approved_by_user_id'),
+  approvedMinutes: integer('approved_minutes'),
+  hourlyRateCents: integer('hourly_rate_cents'),
+  approvedAmountCents: integer('approved_amount_cents'),
+  adjustmentReason: text('adjustment_reason'),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (table) => [
@@ -311,8 +318,44 @@ export const competencies = pgTable('competencies', {
   foreignKey({ columns: [table.tenantId, table.allocationId], foreignColumns: [allocations.tenantId, allocations.id], name: 'competencies_tenant_allocation_fk' }),
   foreignKey({ columns: [table.tenantId, table.clientId], foreignColumns: [clients.tenantId, clients.id], name: 'competencies_tenant_client_fk' }),
   foreignKey({ columns: [table.tenantId, table.managerUserId], foreignColumns: [users.tenantId, users.id], name: 'competencies_tenant_manager_fk' }),
+  foreignKey({ columns: [table.tenantId, table.approvedByUserId], foreignColumns: [users.tenantId, users.id], name: 'competencies_tenant_approver_fk' }),
   check('competencies_month_first_day_check', sql`extract(day from ${table.referenceMonth}) = 1`),
   check('competencies_total_nonnegative_check', sql`${table.totalMinutes} >= 0`),
+]);
+
+export const competenceEvents = pgTable('competence_events', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  competenceId: uuid('competence_id').notNull(),
+  actorUserId: uuid('actor_user_id'),
+  eventType: text('event_type').notNull(),
+  fromStatus: competenceStatus('from_status').notNull(),
+  toStatus: competenceStatus('to_status').notNull(),
+  reason: text('reason'),
+  metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  occurredAt: timestamp('occurred_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  index('competence_events_tenant_competence_occurred_idx').on(table.tenantId, table.competenceId, table.occurredAt),
+  foreignKey({ columns: [table.tenantId, table.competenceId], foreignColumns: [competencies.tenantId, competencies.id], name: 'competence_events_tenant_competence_fk' }),
+  foreignKey({ columns: [table.tenantId, table.actorUserId], foreignColumns: [users.tenantId, users.id], name: 'competence_events_tenant_actor_fk' }),
+]);
+
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  recipientUserId: uuid('recipient_user_id').notNull(),
+  competenceId: uuid('competence_id'),
+  type: text('type').notNull(),
+  title: text('title').notNull(),
+  message: text('message').notNull(),
+  deduplicationKey: text('deduplication_key').notNull(),
+  readAt: timestamp('read_at', { withTimezone: true, mode: 'date' }),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('notifications_tenant_deduplication_unique').on(table.tenantId, table.deduplicationKey),
+  index('notifications_tenant_recipient_created_idx').on(table.tenantId, table.recipientUserId, table.createdAt),
+  foreignKey({ columns: [table.tenantId, table.recipientUserId], foreignColumns: [users.tenantId, users.id], name: 'notifications_tenant_recipient_fk' }),
+  foreignKey({ columns: [table.tenantId, table.competenceId], foreignColumns: [competencies.tenantId, competencies.id], name: 'notifications_tenant_competence_fk' }),
 ]);
 
 export const timeEntries = pgTable('time_entries', {

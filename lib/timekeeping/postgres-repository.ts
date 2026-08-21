@@ -15,6 +15,9 @@ const competenceSelection = {
   allocationId: competencies.allocationId, clientId: competencies.clientId, managerUserId: competencies.managerUserId,
   clientName: clients.name, managerName: users.displayName, referenceMonth: competencies.referenceMonth,
   status: competencies.status, totalMinutes: competencies.totalMinutes, revision: competencies.revision,
+  submittedAt: competencies.submittedAt, approvedAt: competencies.approvedAt, approvedByUserId: competencies.approvedByUserId,
+  approvedMinutes: competencies.approvedMinutes, hourlyRateCents: competencies.hourlyRateCents,
+  approvedAmountCents: competencies.approvedAmountCents, adjustmentReason: competencies.adjustmentReason,
   createdAt: competencies.createdAt, updatedAt: competencies.updatedAt,
 };
 

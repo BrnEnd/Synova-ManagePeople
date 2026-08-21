@@ -1,0 +1,5 @@
+import { z } from 'zod';
+import { approvalError, authorizedManager } from '@/lib/approvals/http';
+import { getApprovalsModule } from '@/lib/approvals/server';
+const schema = z.object({ reason: z.string().trim().min(3).max(2000) }).strict();
+export async function POST(request: Request, context: { params: Promise<{ competenceId: string }> }) { const { identity, response } = await authorizedManager(); if (!identity) return response; let payload: unknown; try { payload = await request.json(); } catch { return Response.json({ error: 'Solicitação inválida.' }, { status: 400 }); } const parsed = schema.safeParse(payload); if (!parsed.success) return Response.json({ error: 'Informe o motivo dos ajustes.' }, { status: 422 }); try { const { competenceId } = await context.params; return Response.json(await getApprovalsModule().requestAdjustments({ tenantId: identity.tenantId, managerUserId: identity.id, competenceId, reason: parsed.data.reason })); } catch (error) { return approvalError(error, 'Não foi possível solicitar ajustes.'); } }

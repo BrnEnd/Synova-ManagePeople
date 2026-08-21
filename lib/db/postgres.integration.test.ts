@@ -29,6 +29,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { PostgresWorkforceRepository },
       { createTimekeepingModule },
       { PostgresTimekeepingRepository },
+      { createApprovalsModule },
+      { PostgresApprovalRepository },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
@@ -48,6 +50,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       import('@/lib/workforce/postgres-repository'),
       import('@/lib/timekeeping/module'),
       import('@/lib/timekeeping/postgres-repository'),
+      import('@/lib/approvals/module'),
+      import('@/lib/approvals/postgres-repository'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
@@ -214,6 +218,17 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       expect(secondEntry).toMatchObject({ competence: { totalMinutes: 570 }, entries: [{ workDate: '2026-08-03', minutes: 450 }, { workDate: '2026-08-04', minutes: 120 }] });
       await expect(timekeeping.get(otherTenant.tenant.id, employeeUserResult.user.id, competence.competence.id)).rejects.toThrow('Competência não encontrada.');
 
+      const approvals = createApprovalsModule({ repository: new PostgresApprovalRepository(), generateId: randomUUID, now: () => new Date() });
+      await expect(approvals.submit({ tenantId, userId: employeeUserResult.user.id, competenceId: competence.competence.id })).resolves.toMatchObject({ competence: { status: 'awaiting_approval', revision: 1 } });
+      await expect(approvals.requestAdjustments({ tenantId, managerUserId: userResult.user.id, competenceId: competence.competence.id, reason: 'Detalhar as atividades do segundo dia.' })).resolves.toMatchObject({ competence: { status: 'adjustments_requested', adjustmentReason: 'Detalhar as atividades do segundo dia.' } });
+      await timekeeping.saveEntry({ tenantId, userId: employeeUserResult.user.id, competenceId: competence.competence.id, workDate: '2026-08-04', minutes: 120, observation: 'Reunião e documentação' });
+      await expect(approvals.submit({ tenantId, userId: employeeUserResult.user.id, competenceId: competence.competence.id })).resolves.toMatchObject({ competence: { status: 'awaiting_approval', revision: 2 } });
+      const approved = await approvals.approve({ tenantId, managerUserId: userResult.user.id, competenceId: competence.competence.id });
+      expect(approved).toMatchObject({ competence: { status: 'awaiting_invoice', approvedMinutes: 570, hourlyRateCents: 10_000, approvedAmountCents: 95_000, revision: 2 } });
+      expect(approved.events).toHaveLength(4);
+      await expect(approvals.getForManager(otherTenant.tenant.id, userResult.user.id, competence.competence.id)).rejects.toThrow('Competência não encontrada.');
+      await expect(approvals.listNotifications(tenantId, employeeUserResult.user.id)).resolves.toHaveLength(2);
+
       const rawServiceKey = `service-key-${randomUUID()}-${randomUUID()}`;
       await provisioning.createServiceKey({
         tenantId,
@@ -301,6 +316,15 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         return { own: own[0], other: Number(other[0].total) };
       });
       expect(timeVisibility).toEqual({ own: { competencies: '1', entries: '2' }, other: 0 });
+
+      const workflowVisibility = await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        const own = await transaction<{ events: string; notifications: string }[]>`select (select count(*) from competence_events)::text as events, (select count(*) from notifications)::text as notifications`;
+        await transaction`select set_config('app.tenant_id', ${otherTenant.tenant.id}, true)`;
+        const other = await transaction<{ total: string }[]>`select ((select count(*) from competence_events) + (select count(*) from notifications))::text as total`;
+        return { own: own[0], other: Number(other[0].total) };
+      });
+      expect(workflowVisibility).toEqual({ own: { events: '4', notifications: '4' }, other: 0 });
 
       await expect(normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
@@ -414,6 +438,9 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         'commercial_condition.created',
         'competence.created',
         'time_entry.saved',
+        'competence.submitted',
+        'competence.adjustments_requested',
+        'competence.approved',
         'service_key.created',
         'employee.external_pre_registered',
         'user.logged_in',
@@ -424,6 +451,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
           await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
           await transaction`delete from login_attempts where tenant_id = ${tenantId}`;
           await transaction`delete from employee_notes where tenant_id = ${tenantId}`;
+          await transaction`delete from notifications where tenant_id = ${tenantId}`;
+          await transaction`delete from competence_events where tenant_id = ${tenantId}`;
           await transaction`delete from time_entries where tenant_id = ${tenantId}`;
           await transaction`delete from competencies where tenant_id = ${tenantId}`;
           await transaction`delete from commercial_conditions where tenant_id = ${tenantId}`;

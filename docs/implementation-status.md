@@ -4,7 +4,30 @@ Este arquivo é o ponto de retomada operacional da V1 descrita no issue GitHub #
 
 ## Checkpoint atual
 
-**Etapa 4 — Competências e apontamentos** (`codex/complete-v1`, commit desta etapa)
+**Etapa 5 — Aprovação, ajustes, calendário e notificações** (`codex/complete-v1`, commit desta etapa)
+
+Entregue nesta etapa:
+
+- envio e reenvio explícitos da competência pelo funcionário;
+- fila e revisão detalhada exclusivas do gestor responsável;
+- aprovação ou devolução obrigatoriamente motivada, com máquina de estados;
+- eventos imutáveis, revisão e notificações internas idempotentes;
+- fotografia de minutos, valor-hora e valor devido no momento da aprovação;
+- último dia útil nacional com `date-holidays`, fuso de São Paulo e cron autenticado;
+- indicador navegável no dashboard e telas do fluxo para gestor e funcionário.
+
+Validação desta etapa:
+
+- typecheck, lint e 60 testes unitários aprovados;
+- migrações completas em PostgreSQL vazio e integração com roles restritas aprovada;
+- isolamento RLS de eventos e notificações;
+- smoke HTTP de envio, devolução, correção, reenvio, aprovação, fotografia financeira e notificações.
+
+Os dados e o banco sintéticos foram removidos.
+
+## Checkpoint anterior
+
+**Etapa 4 — Competências e apontamentos** (`e03ac35`)
 
 Entregue nesta etapa:
 
@@ -24,7 +47,7 @@ Validação desta etapa:
 
 Os dados e o banco sintéticos foram removidos.
 
-## Checkpoint anterior
+## Checkpoint anterior à etapa 4
 
 **Etapa 3 — Contratos, alocações e condições** (`898b5e1`)
 
@@ -95,13 +118,12 @@ Os recursos sintéticos do smoke e o banco temporário foram removidos. O banco 
 
 ## Próxima etapa
 
-**Etapa 5 — Aprovação, ajustes, calendário e notificações**
+**Etapa 6 — Previsão PDF, Nota Fiscal e pagamento**
 
-Implementar envio das horas, fila do gestor, aprovação ou solicitação de ajustes, histórico das transições e lembretes no último dia útil nacional.
+Gerar a previsão de pagamento em PDF, receber a Nota Fiscal e permitir que a gestão registre pagamento e comprovante até o encerramento da competência.
 
 ## Etapas restantes
 
-1. Etapa 5 — Aprovação, ajustes, último dia útil e notificações.
-2. Etapa 6 — Previsão PDF, Nota Fiscal e pagamento.
-3. Etapa 7 — Portal do funcionário, dashboards e E2E completo.
-4. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.
+1. Etapa 6 — Previsão PDF, Nota Fiscal e pagamento.
+2. Etapa 7 — Portal do funcionário, dashboards e E2E completo.
+3. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.

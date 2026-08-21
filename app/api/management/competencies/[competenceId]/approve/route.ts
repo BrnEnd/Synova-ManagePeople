@@ -1,0 +1,3 @@
+import { approvalError, authorizedManager } from '@/lib/approvals/http';
+import { getApprovalsModule } from '@/lib/approvals/server';
+export async function POST(_request: Request, context: { params: Promise<{ competenceId: string }> }) { const { identity, response } = await authorizedManager(); if (!identity) return response; try { const { competenceId } = await context.params; return Response.json(await getApprovalsModule().approve({ tenantId: identity.tenantId, managerUserId: identity.id, competenceId })); } catch (error) { return approvalError(error, 'Não foi possível aprovar a competência.'); } }

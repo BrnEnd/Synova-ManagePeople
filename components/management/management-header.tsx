@@ -4,13 +4,14 @@ import { LogoutButton } from '@/components/auth/logout-button';
 type ManagementHeaderProps = {
   displayName: string;
   tenantSlug: string;
-  active: 'dashboard' | 'employees' | 'clients';
+  active: 'dashboard' | 'employees' | 'clients' | 'competencies';
 };
 
 const navigation = [
   { id: 'dashboard', href: '/gestao', label: 'Visão geral' },
   { id: 'employees', href: '/gestao/funcionarios', label: 'Funcionários' },
   { id: 'clients', href: '/gestao/clientes', label: 'Clientes' },
+  { id: 'competencies', href: '/gestao/competencias', label: 'Competências' },
 ] as const;
 
 export function ManagementHeader({ displayName, tenantSlug, active }: ManagementHeaderProps) {

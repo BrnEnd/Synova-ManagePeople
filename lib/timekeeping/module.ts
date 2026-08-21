@@ -3,7 +3,9 @@ export type TimeEntry = { id: string; tenantId: string; competenceId: string; em
 export type Competence = {
   id: string; tenantId: string; employeeId: string; allocationId: string; clientId: string; managerUserId: string;
   clientName: string; managerName: string; referenceMonth: string; status: CompetenceStatus; totalMinutes: number;
-  revision: number; createdAt: Date; updatedAt: Date;
+  revision: number; submittedAt: Date | null; approvedAt: Date | null; approvedByUserId: string | null;
+  approvedMinutes: number | null; hourlyRateCents: number | null; approvedAmountCents: number | null;
+  adjustmentReason: string | null; createdAt: Date; updatedAt: Date;
 };
 export type CompetenceDetail = { competence: Competence; entries: TimeEntry[] };
 

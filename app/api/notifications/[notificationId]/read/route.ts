@@ -1,0 +1,3 @@
+import { approvalError, authorizedAnyUser } from '@/lib/approvals/http';
+import { getApprovalsModule } from '@/lib/approvals/server';
+export async function POST(_request: Request, context: { params: Promise<{ notificationId: string }> }) { const { identity, response } = await authorizedAnyUser(); if (!identity) return response; try { const { notificationId } = await context.params; return Response.json({ notification: await getApprovalsModule().markNotificationRead(identity.tenantId, identity.id, notificationId) }); } catch (error) { return approvalError(error, 'Não foi possível atualizar a notificação.'); } }

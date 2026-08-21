@@ -192,3 +192,27 @@ curl -b synova-employee-session.txt -X DELETE \
 ```
 
 Salvar novamente a mesma data atualiza a linha existente. O cookie de sessão deve ser eliminado após o uso.
+
+## Aprovação e notificações via CLI
+
+```bash
+# Funcionário envia o consolidado
+curl -b synova-employee-session.txt -X POST \
+  "$APP_URL/api/portal/competencies/<COMPETENCE_ID>/submit"
+
+# Gestor consulta sua fila e uma competência
+curl -b synova-session.txt "$APP_URL/api/management/competencies"
+curl -b synova-session.txt "$APP_URL/api/management/competencies/<COMPETENCE_ID>"
+
+# Gestor solicita ajustes ou aprova
+curl -b synova-session.txt -X POST \
+  "$APP_URL/api/management/competencies/<COMPETENCE_ID>/adjustments" \
+  -H "Content-Type: application/json" --data '{"reason":"Detalhar as atividades."}'
+curl -b synova-session.txt -X POST \
+  "$APP_URL/api/management/competencies/<COMPETENCE_ID>/approve"
+
+# Qualquer usuário autenticado consulta suas notificações
+curl -b synova-employee-session.txt "$APP_URL/api/notifications"
+```
+
+O job `/api/internal/jobs/month-close-reminders` exige `Authorization: Bearer $CRON_SECRET`. A configuração da Vercel chama a rota diariamente às 12:00 UTC; a aplicação só gera lembretes no último dia útil nacional, considerando a data em `America/Sao_Paulo`.

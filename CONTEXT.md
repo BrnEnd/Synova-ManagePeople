@@ -73,3 +73,11 @@ _Evitar_: Mês sem estado, folha de pagamento
 **Apontamento de horas**:
 Linha diária da Competência, armazenada em minutos e acompanhada de observação opcional.
 _Evitar_: Total manual, condição financeira
+
+**Evento de competência**:
+Registro imutável de uma transição mensal, com estado anterior, novo estado, autor, horário e motivo quando aplicável.
+_Evitar_: Status sobrescrito sem histórico
+
+**Notificação**:
+Pendência interna direcionada a um Usuário e protegida contra duplicação pelo evento que a originou.
+_Evitar_: E-mail, evento de auditoria
