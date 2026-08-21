@@ -2,6 +2,8 @@
 
 Portal multi-tenant para gestão de funcionários, competências, documentos e pagamentos da Synova.
 
+O procedimento de migração, segredos, publicação e verificação produtiva está em [`docs/production-runbook.md`](docs/production-runbook.md).
+
 ## Desenvolvimento local
 
 1. Copie `.env.example` para `.env.local` e configure Postgres e os segredos.
