@@ -17,7 +17,7 @@ Entregue nesta etapa:
 
 Validação desta etapa:
 
-- deployment produtivo `dpl_3bLqTFWDqsFqasvWAKTtc6A3aHFh` em estado `Ready`;
+- deployment produtivo `dpl_FT6tuFqhwjyiKFdQ2GLCw2iuaXDW` em estado `Ready`;
 - integração completa no Neon produtivo aprovada com roles restritas;
 - E2E HTTP público aprovado do provisionamento ao pagamento com Blob privado;
 - `/entrar` respondeu HTTP 200 com HTTPS/HSTS;
