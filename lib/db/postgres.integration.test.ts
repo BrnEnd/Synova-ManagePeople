@@ -33,6 +33,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { PostgresApprovalRepository },
       { createFinanceModule },
       { PostgresFinanceRepository },
+      { createDashboardModule },
+      { PostgresDashboardRepository },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
@@ -56,6 +58,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       import('@/lib/approvals/postgres-repository'),
       import('@/lib/finance/module'),
       import('@/lib/finance/postgres-repository'),
+      import('@/lib/dashboard/module'),
+      import('@/lib/dashboard/postgres-repository'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
@@ -242,6 +246,19 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       expect(payment).toMatchObject({ amountCents: 95_000, receiptDocumentId: receiptDocument.document.id });
       await expect(finance.getForecastData(tenantId, competence.competence.id)).resolves.toMatchObject({ forecastDocumentId });
       await expect(timekeeping.get(tenantId, employeeUserResult.user.id, competence.competence.id)).resolves.toMatchObject({ competence: { status: 'paid', invoiceDocumentId: invoiceDocument.document.id, forecastDocumentId } });
+
+      const dashboard = createDashboardModule({ repository: new PostgresDashboardRepository(), now: () => new Date('2026-08-21T12:00:00Z') });
+      await expect(dashboard.load(tenantId, userResult.user.id)).resolves.toEqual({
+        activeEmployees: 1,
+        newHires: 1,
+        newHiresPending: 0,
+        notSubmitted: 0,
+        awaitingApproval: 0,
+        awaitingInvoice: 0,
+        awaitingPayment: 0,
+        paymentForecastCents: 95_000,
+        revenueForecastCents: 190_000,
+      });
 
       const rawServiceKey = `service-key-${randomUUID()}-${randomUUID()}`;
       await provisioning.createServiceKey({

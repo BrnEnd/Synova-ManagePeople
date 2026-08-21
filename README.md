@@ -37,6 +37,14 @@ npm run lint
 npm run build
 ```
 
+O smoke integral exige a aplicação em execução e as variáveis de banco/provisionamento carregadas:
+
+```bash
+APP_URL=http://localhost:3000 npm run test:e2e
+```
+
+Ele cria um tenant temporário, percorre o fluxo completo até o pagamento, valida as páginas autenticadas e remove os dados e arquivos gerados no bloco de limpeza.
+
 O teste de persistência e RLS exige um banco já migrado e duas URLs com as mesmas restrições de roles descritas acima:
 
 ```bash

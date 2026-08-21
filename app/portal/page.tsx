@@ -22,12 +22,19 @@ export default async function EmployeePortalPage() {
     if (!(error instanceof MissingAllocationError)) throw error;
     return <main className="mx-auto flex min-h-screen max-w-5xl items-center px-5 py-10"><section className="w-full rounded-3xl border border-white/10 bg-zinc-900/70 p-8"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-orange-400">Portal do Funcionário</p><h1 className="mt-3 text-3xl font-black text-white">Olá, {identity.displayName}</h1></div><LogoutButton /></div><p className="mt-4 text-zinc-400">Sua competência ainda não pode ser aberta porque não há uma alocação válida para este mês. Procure seu gestor.</p></section></main>;
   }
-  const [history, notifications, payment] = await Promise.all([getTimekeepingModule().list(identity.tenantId, identity.id), getApprovalsModule().listNotifications(identity.tenantId, identity.id), getFinanceModule().getPayment(identity.tenantId, detail.competence.id)]);
+  const [history, notifications] = await Promise.all([getTimekeepingModule().list(identity.tenantId, identity.id), getApprovalsModule().listNotifications(identity.tenantId, identity.id)]);
+  const finance = getFinanceModule();
+  const paymentRows = await Promise.all(history.map((competence) => finance.getPayment(identity.tenantId, competence.id)));
+  const financialHistory = history.map((competence, index) => ({
+    ...competence,
+    payment: paymentRows[index] ? { amountCents: paymentRows[index].amountCents, paidAt: paymentRows[index].paidAt.toISOString(), receiptDocumentId: paymentRows[index].receiptDocumentId } : null,
+  }));
+  const payment = paymentRows[history.findIndex((competence) => competence.id === detail.competence.id)] ?? null;
 
   return (
     <main className="min-h-screen">
       <header className="border-b border-white/10 bg-zinc-950/85 px-5 backdrop-blur md:px-10"><div className="mx-auto flex max-w-7xl items-center justify-between py-4"><div><p className="font-black tracking-[-0.03em] text-white">Synova <span className="text-orange-400">Pessoas</span></p><p className="mt-0.5 text-xs font-bold uppercase tracking-[0.16em] text-zinc-600">{identity.displayName}</p></div><LogoutButton /></div></header>
-      <EmployeeTimesheet blobEnabled={isBlobStorageConfigured()} detail={detail} history={history} notifications={notifications.map((notification) => ({ ...notification, createdAt: notification.createdAt.toISOString(), readAt: notification.readAt?.toISOString() ?? null }))} payment={payment ? { amountCents: payment.amountCents, paidAt: payment.paidAt.toISOString(), receiptDocumentId: payment.receiptDocumentId } : null} />
+      <EmployeeTimesheet blobEnabled={isBlobStorageConfigured()} detail={detail} history={financialHistory} notifications={notifications.map((notification) => ({ ...notification, createdAt: notification.createdAt.toISOString(), readAt: notification.readAt?.toISOString() ?? null }))} payment={payment ? { amountCents: payment.amountCents, paidAt: payment.paidAt.toISOString(), receiptDocumentId: payment.receiptDocumentId } : null} />
     </main>
   );
 }

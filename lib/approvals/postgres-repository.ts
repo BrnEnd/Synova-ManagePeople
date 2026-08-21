@@ -5,6 +5,7 @@ import { allocations, auditEvents, clients, competenceEvents, competencies, empl
 import { getProvisioningDb } from '@/lib/db/client';
 import { withTenantTransaction, type DatabaseTransaction } from '@/lib/db/transactions';
 import { InvalidApprovalError, type ApprovalRepository, type CompetenceReview } from '@/lib/approvals/module';
+import type { CompetenceStatus } from '@/lib/timekeeping/module';
 
 const selection = {
   id: competencies.id, tenantId: competencies.tenantId, employeeId: competencies.employeeId,
@@ -54,9 +55,9 @@ export class PostgresApprovalRepository implements ApprovalRepository {
     });
   }
 
-  listForManager(tenantId: string, managerUserId: string) {
+  listForManager(tenantId: string, managerUserId: string, statuses: CompetenceStatus[] = ['awaiting_approval', 'awaiting_payment']) {
     return withTenantTransaction(tenantId, async (tx) => {
-      const rows = await tx.select({ id: competencies.id }).from(competencies).where(and(eq(competencies.tenantId, tenantId), eq(competencies.managerUserId, managerUserId), inArray(competencies.status, ['awaiting_approval', 'awaiting_payment']))).orderBy(asc(competencies.submittedAt));
+      const rows = await tx.select({ id: competencies.id }).from(competencies).where(and(eq(competencies.tenantId, tenantId), eq(competencies.managerUserId, managerUserId), inArray(competencies.status, statuses))).orderBy(asc(competencies.submittedAt));
       return Promise.all(rows.map((row) => managerReview(tx, tenantId, managerUserId, row.id))) as Promise<CompetenceReview[]>;
     });
   }

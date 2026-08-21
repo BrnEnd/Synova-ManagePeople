@@ -4,28 +4,34 @@ Este arquivo é o ponto de retomada operacional da V1 descrita no issue GitHub #
 
 ## Checkpoint atual
 
-**Etapa 6 — Previsão PDF, Nota Fiscal e pagamento** (`codex/complete-v1`, commit desta etapa)
+**Etapa 7 — Portal do funcionário, dashboards e E2E completo** (`codex/complete-v1`, commit desta etapa)
 
 Entregue nesta etapa:
 
-- previsão de pagamento em PDF gerada automaticamente da fotografia aprovada e vinculada sem sobrescrita;
-- download privado da previsão pelo funcionário e pela gestão;
-- envio de Nota Fiscal em PDF ou imagem pelo funcionário, com limite de 25 MB;
-- fila de pagamento e registro gerencial com data, observação e comprovante obrigatório;
-- valor pago invariavelmente igual ao valor congelado (`valor-hora × horas aprovadas`);
-- evento, notificação e encerramento transacionais da competência;
-- armazenamento privado em Vercel Blob e fallback local exclusivo de desenvolvimento.
+- dashboard mensal com os nove indicadores operacionais e financeiros da especificação;
+- filtros navegáveis para funcionários, aprovações, Nota Fiscal e pagamentos;
+- previsão de custo pelo valor congelado e faturamento pela condição comercial vigente;
+- histórico financeiro do funcionário com cliente, horas, valor-hora, total, status e data;
+- downloads históricos de previsão, Nota Fiscal e comprovante;
+- smoke E2E HTTP reutilizável cobrindo o fluxo integral, com limpeza automática dos dados sintéticos.
 
 Validação desta etapa:
 
-- typecheck, lint e 63 testes unitários aprovados;
-- migrações completas em PostgreSQL vazio e integração com roles restritas aprovada;
-- isolamento RLS de pagamentos e documentos financeiros;
-- smoke HTTP de aprovação, PDF válido, Nota Fiscal, pagamento pelo valor congelado e comprovante.
+- typecheck, lint e 65 testes unitários aprovados;
+- integração PostgreSQL com números exatos de custo e faturamento aprovada;
+- E2E HTTP do provisionamento ao pagamento aprovado;
+- renderização autenticada do dashboard e do histórico financeiro validada;
+- limpeza confirmada do tenant, banco e arquivos sintéticos.
 
 Os dados e o banco sintéticos foram removidos.
 
 ## Checkpoint anterior
+
+**Etapa 6 — Previsão PDF, Nota Fiscal e pagamento** (`29239fb`)
+
+Entregou previsão PDF, Nota Fiscal, pagamento pelo valor congelado e comprovante.
+
+## Checkpoint anterior à etapa 6
 
 **Etapa 5 — Aprovação, ajustes, calendário e notificações** (`ab13b73`)
 
@@ -124,11 +130,10 @@ Os recursos sintéticos do smoke e o banco temporário foram removidos. O banco 
 
 ## Próxima etapa
 
-**Etapa 7 — Portal do funcionário, dashboards e E2E completo**
+**Etapa 8 — Infraestrutura, segredos, deploy e validação em produção**
 
-Completar os indicadores navegáveis, o histórico financeiro do funcionário e a cobertura ponta a ponta do fluxo integral.
+Configurar a infraestrutura produtiva, aplicar migrações com roles restritas, publicar e validar o fluxo crítico no domínio final.
 
 ## Etapas restantes
 
-1. Etapa 7 — Portal do funcionário, dashboards e E2E completo.
-2. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.
+1. Etapa 8 — Infraestrutura, segredos, deploy e validação em produção.
