@@ -35,6 +35,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { PostgresFinanceRepository },
       { createDashboardModule },
       { PostgresDashboardRepository },
+      { createEmployeeAccessModule },
+      { PostgresEmployeeAccessAccounts },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
@@ -60,6 +62,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       import('@/lib/finance/postgres-repository'),
       import('@/lib/dashboard/module'),
       import('@/lib/dashboard/postgres-repository'),
+      import('@/lib/employee-access/module'),
+      import('@/lib/employee-access/postgres-repository'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
@@ -113,6 +117,38 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         temporaryPassword,
         idempotencyKey: randomUUID(),
       });
+
+      const accessEmployeeId = randomUUID();
+      await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        await transaction`
+          insert into employees (id, tenant_id, full_name, email, status, onboarding_pending)
+          values (${accessEmployeeId}, ${tenantId}, 'Acesso concorrente', 'access@integration.test', 'active', false)
+        `;
+      });
+      const accessNotifications: string[] = [];
+      const accessAccounts = new PostgresEmployeeAccessAccounts();
+      await expect(accessAccounts.getEmployee(otherTenant.tenant.id, accessEmployeeId)).resolves.toBeNull();
+      const employeeAccess = createEmployeeAccessModule({
+        accounts: accessAccounts,
+        notify: async ({ username }) => { accessNotifications.push(username); },
+        hashPassword,
+        idempotencySecret: 'integration-idempotency-secret',
+        generateId: randomUUID,
+        now: () => new Date(),
+      });
+      const accessCommand = {
+        tenantId,
+        employeeId: accessEmployeeId,
+        actorUserId: userResult.user.id,
+        temporaryPassword,
+      };
+      const accessResults = await Promise.all([
+        employeeAccess.create(accessCommand),
+        employeeAccess.create(accessCommand),
+      ]);
+      expect(accessResults.map((result) => result.notificationStatus).sort()).toEqual(['sent', 'skipped']);
+      expect(accessNotifications).toEqual(['access@integration.test']);
 
       const employeesModule = createEmployeesModule({
         repository: new PostgresEmployeeRepository(),
@@ -422,7 +458,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         const rows = await transaction<{ count: string }[]>`select count(*)::text as count from users`;
         return Number(rows[0].count);
       });
-      expect(scopedUserCount).toBe(2);
+      expect(scopedUserCount).toBe(3);
 
       const identity = createIdentityModule({
         repository: new PostgresIdentityRepository(),
@@ -459,6 +495,25 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         identity: { id: userResult.user.id, tenantId, role: 'manager' },
         rateLimited: false,
       });
+      await expect(identity.authenticate({
+        tenantSlug,
+        email: 'access@integration.test',
+        password: temporaryPassword,
+        ip: '127.0.0.2',
+      })).resolves.toMatchObject({
+        identity: { tenantId, role: 'employee', mustChangePassword: true },
+        rateLimited: false,
+      });
+
+      const accessAudit = await privileged<{ actor_user_id: string | null; event_type: string }[]>`
+        select actor_user_id, event_type from audit_events
+        where tenant_id = ${tenantId}
+          and (entity_id = ${accessEmployeeId} or metadata->>'email' = 'access@integration.test')
+      `;
+      expect(accessAudit).toEqual(expect.arrayContaining([
+        { actor_user_id: userResult.user.id, event_type: 'user.created' },
+        { actor_user_id: userResult.user.id, event_type: 'employee.user_associated' },
+      ]));
 
       const audit = await privileged<{ event_type: string }[]>`
         select event_type from audit_events where tenant_id = ${tenantId} order by occurred_at

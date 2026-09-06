@@ -65,6 +65,7 @@ try {
   const tenantId = tenantResult.tenant.id;
   tenantIds.push(tenantId);
   const managerResult = await provision('/api/internal/provisioning/users', { tenantId, email: managerEmail, displayName: 'Gestora E2E', role: 'manager', temporaryPassword });
+  const employeeUserResult = await provision('/api/internal/provisioning/users', { tenantId, email: employeeEmail, displayName: 'Funcionária E2E', role: 'employee', temporaryPassword });
 
   const manager = new BrowserSession();
   await loginAndChange(manager, managerEmail, temporaryPassword, managerPassword);
@@ -79,11 +80,7 @@ try {
     await manager.request(`/api/employees/${employeeId}/documents`, { method: 'POST', body: identification });
   }
   await manager.json(`/api/employees/${employeeId}`, 'PATCH', { fullName: 'Funcionária E2E', personalEmail: employeeEmail, corporateEmail: `corporativo-${suffix}@synova.local`, phone: '+55 11 99999-9999', identificationDocument: `DOC-${suffix}`, address: { street: 'Rua E2E', city: 'São Paulo', state: 'SP', postalCode: '01000-000', country: 'Brasil' }, entryDate: `${month}-01`, professionalTitle: 'Consultora', employmentType: 'pj', status: 'active' });
-  const accessResult = await manager.json(`/api/employees/${employeeId}/portal-access`, 'POST', {
-    temporaryPassword,
-    passwordConfirmation: temporaryPassword,
-  });
-  if (!accessResult.body.accessCreated) throw new Error('Acesso do Funcionário não foi criado.');
+  await provision(`/api/internal/provisioning/users/${employeeUserResult.user.id}/employee`, { tenantId, employeeId });
 
   const clientResult = await manager.json('/api/clients', 'POST', { name: 'Cliente E2E', legalName: 'Cliente E2E Ltda', taxId: null, contactName: null, email: null, phone: null, address: null, observations: null });
   await manager.json(`/api/employees/${employeeId}/contracts`, 'POST', { contractType: 'Prestação de serviços', startDate: `${month}-01`, endDate: null, documentId: null, observations: null });

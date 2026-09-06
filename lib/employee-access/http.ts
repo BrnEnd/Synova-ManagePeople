@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Identity } from '@/lib/identity/module';
 import { managerAccess, managerAccessResponse } from '@/lib/identity/access';
-import { strongPasswordSchema } from '@/lib/identity/password-policy';
+import { strongPasswordMessage, strongPasswordSchema } from '@/lib/identity/password-policy';
 import {
   EmployeeAccessConflictError,
   EmployeeAccessIneligibleError,
@@ -12,12 +12,9 @@ import {
 type EmployeeAccessModule = ReturnType<typeof createEmployeeAccessModule>;
 
 const accessSchema = z.object({
-  temporaryPassword: strongPasswordSchema,
+  temporaryPassword: z.string(),
   passwordConfirmation: z.string(),
-}).strict().refine(
-  (value) => value.temporaryPassword === value.passwordConfirmation,
-  { message: 'As senhas não coincidem.', path: ['passwordConfirmation'] },
-);
+}).strict();
 
 export function createEmployeeAccessHttp(dependencies: {
   access: EmployeeAccessModule;
@@ -38,7 +35,13 @@ export function createEmployeeAccessHttp(dependencies: {
       }
       const parsed = accessSchema.safeParse(payload);
       if (!parsed.success) {
-        return Response.json({ error: 'Informe uma senha temporária válida e confirme-a corretamente.' }, { status: 422 });
+        return Response.json({ error: 'Informe a senha temporária e a confirmação.' }, { status: 422 });
+      }
+      if (parsed.data.temporaryPassword !== parsed.data.passwordConfirmation) {
+        return Response.json({ error: 'As senhas não coincidem.' }, { status: 422 });
+      }
+      if (!strongPasswordSchema.safeParse(parsed.data.temporaryPassword).success) {
+        return Response.json({ error: strongPasswordMessage }, { status: 422 });
       }
 
       try {
@@ -48,7 +51,7 @@ export function createEmployeeAccessHttp(dependencies: {
           actorUserId: identity.id,
           temporaryPassword: parsed.data.temporaryPassword,
         });
-        return Response.json(result, { status: 201 });
+        return Response.json(result, { status: result.notificationStatus === 'skipped' ? 200 : 201 });
       } catch (error) {
         if (error instanceof EmployeeAccessNotFoundError) {
           return Response.json({ error: error.message }, { status: 404 });

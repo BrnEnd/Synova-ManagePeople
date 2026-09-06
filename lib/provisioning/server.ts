@@ -5,7 +5,7 @@ import { createProvisioningHttp } from '@/lib/provisioning/http';
 import { createProvisioningModule } from '@/lib/provisioning/module';
 import { PostgresProvisioningRepository } from '@/lib/provisioning/postgres-repository';
 
-export function getProvisioningModule() {
+function getProvisioningModule() {
   const idempotencySecret = process.env.PROVISIONING_IDEMPOTENCY_SECRET;
   if (!idempotencySecret) throw new Error('PROVISIONING_IDEMPOTENCY_SECRET não configurado.');
 
