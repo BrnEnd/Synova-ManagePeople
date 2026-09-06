@@ -1,6 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { auditEvents, employees, idempotencyRecords, users } from '@/lib/db/schema';
 import { withTenantTransaction } from '@/lib/db/transactions';
 import {
@@ -77,12 +77,24 @@ export class PostgresEmployeeAccessAccounts implements EmployeeAccessAccounts {
           return { user: mapUser(user), replayed: true };
         }
 
+        await tx.execute(sql`
+          select id from employees
+          where tenant_id = ${input.tenantId} and id = ${input.employeeId}
+          for update
+        `);
         const [employee] = await tx.select().from(employees).where(and(
           eq(employees.tenantId, input.tenantId),
           eq(employees.id, input.employeeId),
         )).limit(1);
         if (!employee) throw new EmployeeAccessNotFoundError();
-        assertEmployeeAccessAvailable(mapEmployee(employee));
+        const currentEmployee = mapEmployee(employee);
+        assertEmployeeAccessAvailable(currentEmployee);
+        if (
+          currentEmployee.personalEmail!.trim().toLowerCase() !== input.user.email
+          || currentEmployee.fullName.trim() !== input.user.displayName
+        ) {
+          throw new EmployeeAccessConflictError('Os dados do funcionário mudaram. Atualize a página e tente novamente.');
+        }
 
         const [createdUser] = await tx.insert(users).values({
           ...input.user,
@@ -90,13 +102,20 @@ export class PostgresEmployeeAccessAccounts implements EmployeeAccessAccounts {
           passwordHash: input.credentials.passwordHash,
           updatedAt: input.createdAt,
         }).returning();
-        await tx.update(employees).set({
+        const [associatedEmployee] = await tx.update(employees).set({
           userId: createdUser.id,
           updatedAt: input.createdAt,
         }).where(and(
           eq(employees.tenantId, input.tenantId),
           eq(employees.id, input.employeeId),
-        ));
+          isNull(employees.userId),
+          eq(employees.status, 'active'),
+          eq(employees.onboardingPending, false),
+          eq(employees.email, currentEmployee.personalEmail!),
+        )).returning({ id: employees.id });
+        if (!associatedEmployee) {
+          throw new EmployeeAccessConflictError('O funcionário deixou de estar disponível para criação de acesso.');
+        }
         await tx.insert(auditEvents).values([
           {
             id: randomUUID(),

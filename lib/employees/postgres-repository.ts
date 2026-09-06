@@ -1,6 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, isNull, ne } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, ne, or } from 'drizzle-orm';
 import { auditEvents, documents, employeeNotes, employees, users } from '@/lib/db/schema';
 import { withTenantTransaction } from '@/lib/db/transactions';
 import type {
@@ -240,7 +240,11 @@ export class PostgresEmployeeRepository implements EmployeeRepository {
   async associateUser(tenantId: string, employeeId: string, userId: string, actorUserId: string, at: Date) {
     return withTenantTransaction(tenantId, async (tx) => {
       const [updated] = await tx.update(employees).set({ userId, updatedAt: at })
-        .where(and(eq(employees.id, employeeId), eq(employees.tenantId, tenantId)))
+        .where(and(
+          eq(employees.id, employeeId),
+          eq(employees.tenantId, tenantId),
+          or(isNull(employees.userId), eq(employees.userId, userId)),
+        ))
         .returning();
       if (!updated) return null;
       await tx.insert(auditEvents).values({

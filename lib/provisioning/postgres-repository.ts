@@ -1,6 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { auditEvents, employees, idempotencyRecords, serviceKeys, tenants, users } from '@/lib/db/schema';
 import { withProvisioningTransaction, withTenantTransaction, type DatabaseTransaction } from '@/lib/db/transactions';
 import type { ProvisioningRepository, ServiceKey, Tenant, User, UserEmployeeAssociation } from '@/lib/provisioning/module';
@@ -226,6 +226,7 @@ export class PostgresProvisioningRepository implements ProvisioningRepository {
       }).where(and(
         eq(employees.id, input.employeeId),
         eq(employees.tenantId, input.tenantId),
+        or(isNull(employees.userId), eq(employees.userId, input.userId)),
       )).returning();
       if (!updated) throw new Error('Funcionário não encontrado no tenant.');
 

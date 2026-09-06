@@ -36,7 +36,13 @@ function request(body: Record<string, unknown>) {
   });
 }
 
-function createAccessTestContext(options?: { notificationFails?: boolean; employee?: AccessEmployee; identity?: Identity | null; replayed?: boolean }) {
+function createAccessTestContext(options?: {
+  notificationFails?: boolean;
+  employee?: AccessEmployee;
+  identity?: Identity | null;
+  replayed?: boolean;
+  accessConflict?: boolean;
+}) {
   const candidate = options?.employee ?? employee;
   const sent: Array<{ employeeName: string; username: string; temporaryPassword: string }> = [];
   const createdAccess: Array<Parameters<EmployeeAccessAccounts['createAccess']>[0]> = [];
@@ -46,6 +52,7 @@ function createAccessTestContext(options?: { notificationFails?: boolean; employ
       getEmployee: async () => candidate,
       createAccess: async (input) => {
         createdAccess.push(input);
+        if (options?.accessConflict) throw new EmployeeAccessConflictError();
         if (candidate.userId && !options?.replayed) {
           throw new EmployeeAccessConflictError('Este funcionário já possui acesso ao portal.');
         }
@@ -182,6 +189,20 @@ describe('criação gerencial de acesso ao portal', () => {
       employeeId: 'employee-a', userId: 'user-a', error: expect.any(Error),
     }]);
     expect(JSON.stringify(context.notificationErrors)).not.toContain(temporaryPassword);
+  });
+
+  test('retorna conflito quando o e-mail já pertence a outro Usuário', async () => {
+    const context = createAccessTestContext({ accessConflict: true });
+    const response = await context.http.create(request({
+      temporaryPassword: 'Synova#2026!Inicial',
+      passwordConfirmation: 'Synova#2026!Inicial',
+    }), employee.id);
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Não foi possível criar o acesso porque o e-mail já está em uso.',
+    });
+    expect(context.sent).toHaveLength(0);
   });
 
   test('não envia novamente as credenciais quando a criação idempotente é repetida', async () => {

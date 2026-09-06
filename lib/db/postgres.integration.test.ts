@@ -35,8 +35,9 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       { PostgresFinanceRepository },
       { createDashboardModule },
       { PostgresDashboardRepository },
-      { createEmployeeAccessModule },
+      { createEmployeeAccessModule, EmployeeAccessConflictError, EmployeeAccessNotFoundError },
       { PostgresEmployeeAccessAccounts },
+      { createEmployeeAccessHttp },
     ] = await Promise.all([
       import('@/lib/provisioning/module'),
       import('@/lib/provisioning/postgres-repository'),
@@ -64,6 +65,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       import('@/lib/dashboard/postgres-repository'),
       import('@/lib/employee-access/module'),
       import('@/lib/employee-access/postgres-repository'),
+      import('@/lib/employee-access/http'),
     ]);
 
     const normal = postgres(databaseUrl!, { max: 1, prepare: false });
@@ -143,12 +145,48 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         actorUserId: userResult.user.id,
         temporaryPassword,
       };
-      const accessResults = await Promise.all([
-        employeeAccess.create(accessCommand),
-        employeeAccess.create(accessCommand),
+      const employeeAccessHttp = createEmployeeAccessHttp({
+        access: employeeAccess,
+        getIdentity: async () => ({
+          id: userResult.user.id,
+          tenantId,
+          tenantSlug,
+          email: userResult.user.email,
+          displayName: userResult.user.displayName,
+          role: 'manager',
+          mustChangePassword: false,
+        }),
+      });
+      const accessRequest = () => new Request('http://localhost/api/employees/portal-access', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ temporaryPassword, passwordConfirmation: temporaryPassword }),
+      });
+      const accessResponses = await Promise.all([
+        employeeAccessHttp.create(accessRequest(), accessEmployeeId),
+        employeeAccessHttp.create(accessRequest(), accessEmployeeId),
       ]);
+      expect(accessResponses.map((response) => response.status).sort()).toEqual([200, 201]);
+      const accessResults = await Promise.all(accessResponses.map((response) => response.json()));
       expect(accessResults.map((result) => result.notificationStatus).sort()).toEqual(['sent', 'skipped']);
       expect(accessNotifications).toEqual(['access@integration.test']);
+      await expect(employeeAccess.create({
+        ...accessCommand,
+        tenantId: otherTenant.tenant.id,
+      })).rejects.toBeInstanceOf(EmployeeAccessNotFoundError);
+
+      const conflictingEmployeeId = randomUUID();
+      await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        await transaction`
+          insert into employees (id, tenant_id, full_name, email, status, onboarding_pending)
+          values (${conflictingEmployeeId}, ${tenantId}, 'E-mail em conflito', ${userResult.user.email}, 'active', false)
+        `;
+      });
+      await expect(employeeAccess.create({
+        ...accessCommand,
+        employeeId: conflictingEmployeeId,
+      })).rejects.toBeInstanceOf(EmployeeAccessConflictError);
 
       const employeesModule = createEmployeesModule({
         repository: new PostgresEmployeeRepository(),
