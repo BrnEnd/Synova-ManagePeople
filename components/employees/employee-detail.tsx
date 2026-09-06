@@ -98,14 +98,59 @@ function safeName(value: string) {
 export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetailData; blobEnabled: boolean }) {
   const { employee } = detail;
   const router = useRouter();
-  const [busy, setBusy] = useState<'profile' | 'document' | 'note' | null>(null);
+  const [busy, setBusy] = useState<'profile' | 'document' | 'note' | 'access' | null>(null);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('');
+  const [warning, setWarning] = useState('');
   const [error, setError] = useState('');
+  const [accessProvisioned, setAccessProvisioned] = useState(false);
 
   function resetFeedback() {
     setMessage('');
+    setWarning('');
     setError('');
+  }
+
+  async function createPortalAccess(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetFeedback();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const temporaryPassword = String(form.get('temporaryPassword') || '');
+    const passwordConfirmation = String(form.get('passwordConfirmation') || '');
+    if (temporaryPassword !== passwordConfirmation) {
+      setError('As senhas não coincidem.');
+      return;
+    }
+    if (!window.confirm(`Criar acesso ao Portal Synova para ${employee.fullName}?`)) return;
+
+    setBusy('access');
+    try {
+      const response = await fetch(portalPath(`/api/employees/${employee.id}/portal-access`), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ temporaryPassword, passwordConfirmation }),
+      });
+      const body = await response.json() as {
+        error?: string;
+        accessCreated?: boolean;
+        notificationStatus?: 'sent' | 'failed';
+      };
+      if (!response.ok) throw new Error(body.error || 'Não foi possível criar o acesso ao portal.');
+
+      setAccessProvisioned(true);
+      if (body.notificationStatus === 'failed') {
+        setWarning('O acesso foi criado, mas o e-mail interno não foi enviado. Preserve a senha exibida para tratamento manual; ela não poderá ser recuperada depois que você sair desta tela.');
+      } else {
+        formElement.reset();
+        setMessage('Acesso criado e credenciais enviadas aos responsáveis internos.');
+        router.refresh();
+      }
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : 'Não foi possível criar o acesso ao portal.');
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
@@ -240,6 +285,7 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
 
       <div aria-live="polite" className="mt-5">
         {message && <p className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">{message}</p>}
+        {warning && <p role="status" className="rounded-xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm leading-6 text-amber-200">{warning}</p>}
         {error && <p role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p>}
       </div>
 
@@ -303,6 +349,40 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
         </div>
 
         <aside className="space-y-6">
+          <section className="rounded-3xl border border-white/10 bg-zinc-900/80 p-5 sm:p-6">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-400">Portal Synova</p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-black text-white">Acesso</h2>
+              <span className={`rounded-full border px-3 py-1 text-xs font-bold ${employee.userId || accessProvisioned ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200' : 'border-zinc-300/15 bg-white/5 text-zinc-300'}`}>
+                {employee.userId || accessProvisioned ? 'Acesso criado' : 'Sem acesso ao portal'}
+              </span>
+            </div>
+            {employee.userId ? (
+              <p className="mt-4 text-sm leading-6 text-zinc-400">Este Funcionário já possui um Usuário associado.</p>
+            ) : employee.status !== 'active' ? (
+              <p className="mt-4 text-sm leading-6 text-zinc-400">Ative o Funcionário antes de criar o acesso.</p>
+            ) : employee.onboardingPending ? (
+              <p className="mt-4 text-sm leading-6 text-zinc-400">Conclua as pendências de onboarding para liberar a criação do acesso.</p>
+            ) : !employee.personalEmail ? (
+              <p className="mt-4 text-sm leading-6 text-zinc-400">Cadastre o e-mail pessoal para definir o Usuário.</p>
+            ) : (
+              <form className="mt-5 space-y-4" onSubmit={createPortalAccess}>
+                <label className="block text-sm font-bold text-zinc-300">Usuário
+                  <input className="field mt-2 text-zinc-400" readOnly value={employee.personalEmail} />
+                </label>
+                <label className="block text-sm font-bold text-zinc-300">Senha temporária
+                  <input aria-describedby="temporary-password-help" autoComplete="new-password" className="field mt-2" disabled={accessProvisioned} minLength={12} name="temporaryPassword" required type="password" />
+                </label>
+                <label className="block text-sm font-bold text-zinc-300">Confirmar senha
+                  <input autoComplete="new-password" className="field mt-2" disabled={accessProvisioned} minLength={12} name="passwordConfirmation" required type="password" />
+                </label>
+                <p className="text-xs leading-5 text-zinc-500" id="temporary-password-help">Use ao menos 12 caracteres, com maiúscula, minúscula, número e símbolo. A troca será obrigatória no primeiro acesso.</p>
+                <button className="pressable synova-gradient w-full rounded-full px-5 py-3 font-black text-white disabled:cursor-wait disabled:opacity-60" disabled={busy !== null || accessProvisioned} type="submit">
+                  {busy === 'access' ? 'Criando acesso…' : accessProvisioned ? 'Acesso criado' : 'Criar acesso ao portal'}
+                </button>
+              </form>
+            )}
+          </section>
           <section className="rounded-3xl border border-white/10 bg-zinc-900/80 p-5 sm:p-6">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-400">Onboarding</p><h2 className="mt-2 text-xl font-black text-white">Pendências</h2>
             {employee.missingFields.length === 0 ? <p className="mt-4 text-sm leading-6 text-emerald-300">Todos os dados básicos e o documento de identificação foram recebidos.</p> : <ul className="mt-4 space-y-2">{employee.missingFields.map((field) => <li className="flex gap-2 text-sm text-zinc-400" key={field}><span className="text-amber-400" aria-hidden="true">•</span>{pendingLabels[field] || field}</li>)}</ul>}

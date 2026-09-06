@@ -32,8 +32,11 @@ Nunca configure `DATABASE_URL_UNPOOLED`, `POSTGRES_URL` ou outra credencial prop
 - `BLOB_READ_WRITE_TOKEN` ou OIDC com `BLOB_STORE_ID`
 - `CANONICAL_PORTAL_URL=https://www.synovadigital.com.br/portal`
 - `PORTAL_PROXY_SECRET`, compartilhado somente com o gateway do `page-synova`
+- `RESEND_API_KEY`, reutilizando a conta e o remetente verificado do `page-synova`
 
 Segredos são gerados aleatoriamente, armazenados como variáveis protegidas da Vercel e nunca versionados. A rotação de `PROVISIONING_SECRET` não deve alterar `PROVISIONING_IDEMPOTENCY_SECRET`, pois este preserva a equivalência das requests idempotentes.
+
+Credenciais iniciais de Funcionários são enviadas por Resend com o remetente `Synova Digital <vagas@synovadigital.com.br>` somente para os três responsáveis internos configurados no módulo de acesso. O e-mail pessoal do Funcionário aparece no corpo como Usuário, nunca como destinatário. A senha temporária não deve ser registrada em logs, auditoria ou armazenamento persistente.
 
 ## Publicação e verificação
 
