@@ -124,8 +124,8 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       await normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
         await transaction`
-          insert into employees (id, tenant_id, full_name, email, status, onboarding_pending)
-          values (${accessEmployeeId}, ${tenantId}, 'Acesso concorrente', 'access@integration.test', 'active', false)
+          insert into employees (id, tenant_id, full_name, email, status, onboarding_pending, created_at, updated_at)
+          values (${accessEmployeeId}, ${tenantId}, 'Acesso concorrente', 'access@integration.test', 'active', false, '2026-07-01', '2026-07-01')
         `;
       });
       const accessNotifications: string[] = [];
@@ -179,19 +179,26 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       await normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
         await transaction`
-          insert into employees (id, tenant_id, full_name, email, status, onboarding_pending)
-          values (${conflictingEmployeeId}, ${tenantId}, 'E-mail em conflito', ${userResult.user.email}, 'active', false)
+          insert into employees (id, tenant_id, full_name, email, status, onboarding_pending, created_at, updated_at)
+          values (${conflictingEmployeeId}, ${tenantId}, 'E-mail em conflito', ${userResult.user.email}, 'active', false, '2026-07-01', '2026-07-01')
         `;
       });
       await expect(employeeAccess.create({
         ...accessCommand,
         employeeId: conflictingEmployeeId,
       })).rejects.toBeInstanceOf(EmployeeAccessConflictError);
+      await normal.begin(async (transaction) => {
+        await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
+        await transaction`
+          update employees set status = 'inactive', inactivated_at = now(), updated_at = now()
+          where id in (${accessEmployeeId}, ${conflictingEmployeeId})
+        `;
+      });
 
       const employeesModule = createEmployeesModule({
         repository: new PostgresEmployeeRepository(),
         generateId: randomUUID,
-        now: () => new Date(),
+        now: () => new Date('2026-08-10T12:00:00.000Z'),
       });
       const employee = await employeesModule.create({
         tenantId,
