@@ -124,7 +124,7 @@ try {
   const dashboard = await manager.request('/gestao');
   for (const text of ['Previsão de pagamento', 'R$ 950,00', 'Previsão de faturamento', 'R$ 1.900,00']) if (!dashboard.body.includes(text)) throw new Error(`Dashboard não contém: ${text}`);
   const portal = await employee.request('/funcionario');
-  for (const text of ['Histórico de competências e pagamentos', 'Pagamento realizado', 'Nota Fiscal', 'Comprovante']) if (!portal.body.includes(text)) throw new Error(`Portal não contém: ${text}`);
+  for (const text of ['Calendário mensal de apontamentos', 'Histórico de competências e pagamentos', 'Pagamento realizado', 'Nota Fiscal', 'Comprovante']) if (!portal.body.includes(text)) throw new Error(`Portal não contém: ${text}`);
   console.log(`E2E aprovado: tenant=${slug} competence=${competenceId} amount=95000 forecast=PDF dashboard=valid portal=valid`);
 } finally {
   for (const tenantId of tenantIds) {
