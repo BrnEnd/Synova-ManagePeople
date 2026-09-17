@@ -14,6 +14,7 @@ export type TimekeepingRepository = {
   openCompetence(tenantId: string, userId: string, referenceMonth: string, competenceId: string, at: Date): Promise<CompetenceDetail | null>;
   listCompetencies(tenantId: string, userId: string): Promise<Competence[]>;
   getOwnedCompetence(tenantId: string, userId: string, competenceId: string): Promise<CompetenceDetail | null>;
+  allocationForDate(tenantId: string, employeeId: string, workDate: string): Promise<string | null>;
   saveEntry(entry: TimeEntry, userId: string): Promise<CompetenceDetail | null>;
   deleteEntry(tenantId: string, userId: string, competenceId: string, entryId: string, at: Date): Promise<CompetenceDetail | null>;
 };
@@ -51,12 +52,14 @@ export function createTimekeepingModule(dependencies: { repository: TimekeepingR
       if (!editable(detail.competence.status)) throw new InvalidTimekeepingError('Esta competência não permite alterar lançamentos.');
       if (!Number.isInteger(command.minutes) || command.minutes <= 0 || command.minutes > 1440) throw new InvalidTimekeepingError('Informe entre 1 minuto e 24 horas.');
       if (command.workDate.slice(0, 7) !== detail.competence.referenceMonth.slice(0, 7)) throw new InvalidTimekeepingError('A data deve pertencer à competência selecionada.');
+      const allocationId = await dependencies.repository.allocationForDate(command.tenantId, detail.competence.employeeId, command.workDate);
+      if (!allocationId) throw new MissingAllocationError();
       const existing = detail.entries.find((entry) => entry.workDate === command.workDate);
       const now = dependencies.now();
       const saved = await dependencies.repository.saveEntry({
         id: existing?.id ?? dependencies.generateId(), tenantId: command.tenantId,
         competenceId: detail.competence.id, employeeId: detail.competence.employeeId,
-        allocationId: detail.competence.allocationId, workDate: command.workDate, minutes: command.minutes,
+        allocationId, workDate: command.workDate, minutes: command.minutes,
         observation: optional(command.observation), createdAt: existing?.createdAt ?? now, updatedAt: now,
       }, command.userId);
       if (!saved) throw new InvalidTimekeepingError('A competência deixou de permitir alterações.');

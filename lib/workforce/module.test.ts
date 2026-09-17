@@ -58,11 +58,28 @@ describe('workforce module', () => {
   });
 
   it('atualiza a alocação por um dos três fluxos sem sobrescrever vigências', async () => {
-    const updateAllocation = vi.fn(async () => undefined);
+    const updateAllocation = vi.fn<WorkforceRepository['updateAllocation']>(async () => undefined);
     const active = { id: 'allocation-a', tenantId: 'tenant-a', employeeId: 'employee-a', clientId: 'client-a', clientName: 'Cliente', managerUserId: 'manager-a', managerName: 'Gestor', roleTitle: null, startDate: '2026-01-01', endDate: null, status: 'active' as const, observations: null, createdByUserId: 'manager-a', createdAt: new Date(), endedAt: null };
     const { module } = setup({ listAllocations: vi.fn(async () => [active]), updateAllocation });
     await module.updateAllocation({ tenantId: 'tenant-a', employeeId: 'employee-a', allocationId: 'allocation-a', actorUserId: 'manager-a', mode: 'stage', effectiveDate: '2026-07-01', contractType: 'PJ', financialRateCents: 11_500, commercialRateCents: 17_000 });
     expect(updateAllocation).toHaveBeenCalledWith(expect.objectContaining({ mode: 'stage', effectiveDate: '2026-07-01', previousEndDate: '2026-06-30', contractType: 'PJ', financialRateCents: 11_500, commercialRateCents: 17_000 }));
+  });
+
+  it('permite alterar somente os campos informados em uma nova etapa', async () => {
+    const updateAllocation = vi.fn<WorkforceRepository['updateAllocation']>(async () => undefined);
+    const active = { id: 'allocation-a', tenantId: 'tenant-a', employeeId: 'employee-a', clientId: 'client-a', clientName: 'Cliente', managerUserId: 'manager-a', managerName: 'Gestor', roleTitle: null, startDate: '2026-01-01', endDate: null, status: 'active' as const, observations: null, createdByUserId: 'manager-a', createdAt: new Date(), endedAt: null };
+    const { module } = setup({ listAllocations: vi.fn(async () => [active]), listContracts: vi.fn(async () => [{ id: 'contract-a', tenantId: 'tenant-a', employeeId: 'employee-a', documentId: null, contractType: 'PJ', startDate: '2026-05-01', endDate: null, status: 'active' as const, observations: null, createdByUserId: 'manager-a', createdAt: new Date(), endedAt: null }]), updateAllocation });
+    await module.updateAllocation({ tenantId: 'tenant-a', employeeId: 'employee-a', allocationId: 'allocation-a', actorUserId: 'manager-a', mode: 'stage', effectiveDate: '2026-07-01', commercialRateCents: 17_000 });
+    expect(updateAllocation).toHaveBeenCalledWith(expect.objectContaining({ commercialRateCents: 17_000, contractType: undefined }));
+    expect(updateAllocation.mock.calls[0][0]).not.toHaveProperty('financialRateCents');
+  });
+
+  it('aceita intervalo entre o fim atual e o início da alocação substituta', async () => {
+    const updateAllocation = vi.fn<WorkforceRepository['updateAllocation']>(async () => undefined);
+    const active = { id: 'allocation-a', tenantId: 'tenant-a', employeeId: 'employee-a', clientId: 'client-a', clientName: 'Cliente', managerUserId: 'manager-a', managerName: 'Gestor', roleTitle: null, startDate: '2026-01-01', endDate: null, status: 'active' as const, observations: null, createdByUserId: 'manager-a', createdAt: new Date(), endedAt: null };
+    const { module } = setup({ listAllocations: vi.fn(async () => [active]), updateAllocation });
+    await module.updateAllocation({ tenantId: 'tenant-a', employeeId: 'employee-a', allocationId: 'allocation-a', actorUserId: 'manager-a', mode: 'replace', effectiveDate: '2026-08-01', currentEndDate: '2026-07-15', clientId: 'client-b', managerUserId: 'manager-b', contractType: 'PJ', financialRateCents: 12_000, commercialRateCents: 18_000 });
+    expect(updateAllocation).toHaveBeenCalledWith(expect.objectContaining({ previousEndDate: '2026-07-15', effectiveDate: '2026-08-01' }));
   });
 
   it('consolida histórico por vigência com horas aprovadas', async () => {
@@ -76,5 +93,12 @@ describe('workforce module', () => {
       { startDate: '2026-07-01', approvedMinutes: 480, totalPaidCents: 92_000, totalReceivedCents: 136_000 },
       { startDate: '2026-01-01', endDate: '2026-06-30', approvedMinutes: 480, totalPaidCents: 80_000, totalReceivedCents: 120_000 },
     ]);
+  });
+
+  it('não apresenta totais financeiros como válidos quando o snapshot está incompleto', async () => {
+    const allocation = { id: 'allocation-a', tenantId: 'tenant-a', employeeId: 'employee-a', clientId: 'client-a', clientName: 'Cliente A', managerUserId: 'manager-a', managerName: 'Gestor', roleTitle: null, startDate: '2026-01-01', endDate: null, status: 'active' as const, observations: null, createdByUserId: 'manager-a', createdAt: new Date(), endedAt: null };
+    const { module } = setup({ listAllocations: vi.fn(async () => [allocation]), listApprovedEntries: vi.fn(async () => [{ allocationId: 'allocation-a', workDate: '2026-06-15', minutes: 480, costAmountCents: 0, revenueAmountCents: 0, pricingComplete: false }]) });
+    const detail = await module.detail('tenant-a', 'employee-a');
+    expect(detail?.current).toMatchObject({ approvedMinutes: 480, totalPaidCents: null, totalReceivedCents: null });
   });
 });

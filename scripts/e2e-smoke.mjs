@@ -25,14 +25,21 @@ class BrowserSession {
   json(path, method, body, headers = {}) {
     return this.request(path, { method, headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   }
+  raw(path, init = {}) {
+    const headers = new Headers(init.headers);
+    if (this.cookie) headers.set('cookie', this.cookie);
+    return fetch(`${appUrl}${portalPath(path)}`, { ...init, headers, redirect: 'manual' });
+  }
 }
 
 const suffix = randomUUID().slice(0, 8);
 const slug = `e2e-${suffix}`;
 const managerEmail = `gestor-${suffix}@e2e.local`;
+const secondManagerEmail = `gestor-2-${suffix}@e2e.local`;
 const employeeEmail = `funcionario-${suffix}@e2e.local`;
 const temporaryPassword = `Temp#${suffix}Aa1!`;
 const managerPassword = `Gestor#${suffix}Aa2!`;
+const secondManagerPassword = `Gestor2#${suffix}Aa4!`;
 const employeePassword = `Pessoa#${suffix}Aa3!`;
 const monthParts = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', timeZone: 'America/Sao_Paulo' }).formatToParts(new Date());
 const month = `${monthParts.find((part) => part.type === 'year').value}-${monthParts.find((part) => part.type === 'month').value}`;
@@ -65,10 +72,13 @@ try {
   const tenantId = tenantResult.tenant.id;
   tenantIds.push(tenantId);
   const managerResult = await provision('/api/internal/provisioning/users', { tenantId, email: managerEmail, displayName: 'Gestora E2E', role: 'manager', temporaryPassword });
+  await provision('/api/internal/provisioning/users', { tenantId, email: secondManagerEmail, displayName: 'Segundo Gestor E2E', role: 'manager', temporaryPassword });
   const employeeUserResult = await provision('/api/internal/provisioning/users', { tenantId, email: employeeEmail, displayName: 'Funcionária E2E', role: 'employee', temporaryPassword });
 
   const manager = new BrowserSession();
   await loginAndChange(manager, managerEmail, temporaryPassword, managerPassword);
+  const secondManager = new BrowserSession();
+  await loginAndChange(secondManager, secondManagerEmail, temporaryPassword, secondManagerPassword);
   const createdEmployee = await manager.json('/api/employees', 'POST', { fullName: 'Funcionária E2E', email: employeeEmail });
   const employeeId = createdEmployee.body.employee.id;
   const identificationFile = new File(['%PDF-1.4\nE2E identification'], 'identificacao.pdf', { type: 'application/pdf' });
@@ -93,7 +103,15 @@ try {
   const opened = await employee.json('/api/portal/competencies', 'POST', { month });
   const competenceId = opened.body.competence.id;
   await employee.json(`/api/portal/competencies/${competenceId}/entries`, 'POST', { workDate: `${month}-03`, minutes: 570, observation: 'Fluxo completo E2E' });
+  const allManagersDashboard = await secondManager.request('/gestao?scope=all');
+  for (const text of ['9h 30min', 'R$ 1.900,00']) if (!allManagersDashboard.body.includes(text)) throw new Error(`Dashboard no escopo Todos não contém: ${text}`);
+  const ownDashboard = await secondManager.request('/gestao?scope=mine');
+  if (ownDashboard.body.includes('9h 30min')) throw new Error('Dashboard sob minha gestão exibiu horas de outro gestor.');
   await employee.request(`/api/portal/competencies/${competenceId}/submit`, { method: 'POST' });
+  const readonlyReview = await secondManager.request(`/gestao/competencias/${competenceId}?scope=all`);
+  if (!readonlyReview.body.includes('Somente leitura')) throw new Error('Outro gestor não recebeu a visualização somente leitura.');
+  const forbiddenApproval = await secondManager.raw(`/api/management/competencies/${competenceId}/approve`, { method: 'POST' });
+  if (forbiddenApproval.status !== 404) throw new Error(`Outro gestor conseguiu mutar a competência: status ${forbiddenApproval.status}.`);
   await manager.request(`/api/management/competencies/${competenceId}/approve`, { method: 'POST' });
 
   const approved = await employee.request(`/api/portal/competencies/${competenceId}`);

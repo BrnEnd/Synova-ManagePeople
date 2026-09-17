@@ -87,6 +87,16 @@ export class PostgresTimekeepingRepository implements TimekeepingRepository {
     return withTenantTransaction(tenantId, (tx) => detailFor(tx, tenantId, userId, competenceId));
   }
 
+  allocationForDate(tenantId: string, employeeId: string, workDate: string) {
+    return withTenantTransaction(tenantId, async (tx) => {
+      const [allocation] = await tx.select({ id: allocations.id }).from(allocations).where(and(
+        eq(allocations.tenantId, tenantId), eq(allocations.employeeId, employeeId),
+        lte(allocations.startDate, workDate), or(isNull(allocations.endDate), gte(allocations.endDate, workDate)),
+      )).orderBy(desc(allocations.startDate), desc(allocations.createdAt)).limit(1);
+      return allocation?.id ?? null;
+    });
+  }
+
   saveEntry(entry: TimeEntry, userId: string) {
     return withTenantTransaction(entry.tenantId, async (tx) => {
       const [editable] = await tx.select({ id: competencies.id }).from(competencies)
@@ -95,7 +105,7 @@ export class PostgresTimekeepingRepository implements TimekeepingRepository {
       if (!editable) return null;
       const [saved] = await tx.insert(timeEntries).values(entry).onConflictDoUpdate({
         target: [timeEntries.tenantId, timeEntries.competenceId, timeEntries.workDate],
-        set: { minutes: entry.minutes, observation: entry.observation, updatedAt: entry.updatedAt },
+        set: { allocationId: entry.allocationId, minutes: entry.minutes, observation: entry.observation, updatedAt: entry.updatedAt },
       }).returning();
       await recalculate(tx, entry.tenantId, entry.competenceId, entry.updatedAt);
       await tx.insert(auditEvents).values({ id: randomUUID(), tenantId: entry.tenantId, actorUserId: userId, eventType: 'time_entry.saved', entityType: 'competence', entityId: entry.competenceId, metadata: { entryId: saved.id, workDate: saved.workDate, minutes: saved.minutes }, occurredAt: entry.updatedAt });

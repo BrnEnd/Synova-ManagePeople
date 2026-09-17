@@ -81,17 +81,17 @@ export class PostgresApprovalRepository implements ApprovalRepository {
 
   approve(tenantId: string, managerUserId: string, competenceId: string, eventId: string, notificationId: string, at: Date) {
     return withTenantTransaction(tenantId, async (tx) => {
-      const [current] = await tx.select({ employeeId: competencies.employeeId, allocationId: competencies.allocationId, totalMinutes: competencies.totalMinutes, revision: competencies.revision }).from(competencies).where(and(eq(competencies.tenantId, tenantId), eq(competencies.id, competenceId), eq(competencies.managerUserId, managerUserId), eq(competencies.status, 'awaiting_approval'))).limit(1);
+      const [current] = await tx.select({ employeeId: competencies.employeeId, totalMinutes: competencies.totalMinutes, revision: competencies.revision }).from(competencies).where(and(eq(competencies.tenantId, tenantId), eq(competencies.id, competenceId), eq(competencies.managerUserId, managerUserId), eq(competencies.status, 'awaiting_approval'))).limit(1);
       if (!current) return null;
       const [entries, [employee]] = await Promise.all([
-        tx.select({ id: timeEntries.id, workDate: timeEntries.workDate, minutes: timeEntries.minutes }).from(timeEntries).where(and(eq(timeEntries.tenantId, tenantId), eq(timeEntries.competenceId, competenceId))).orderBy(asc(timeEntries.workDate)),
+        tx.select({ id: timeEntries.id, allocationId: timeEntries.allocationId, workDate: timeEntries.workDate, minutes: timeEntries.minutes }).from(timeEntries).where(and(eq(timeEntries.tenantId, tenantId), eq(timeEntries.competenceId, competenceId))).orderBy(asc(timeEntries.workDate)),
         tx.select({ userId: employees.userId }).from(employees).where(and(eq(employees.tenantId, tenantId), eq(employees.id, current.employeeId))).limit(1),
       ]);
       if (!employee?.userId) throw new InvalidApprovalError('O funcionário não possui usuário associado.');
       const pricedEntries = await Promise.all(entries.map(async (entry) => {
         const [[financial], [commercial]] = await Promise.all([
           tx.select({ hourlyRateCents: financialConditions.hourlyRateCents }).from(financialConditions).where(and(eq(financialConditions.tenantId, tenantId), eq(financialConditions.employeeId, current.employeeId), lte(financialConditions.effectiveFrom, entry.workDate), or(isNull(financialConditions.effectiveTo), gte(financialConditions.effectiveTo, entry.workDate)))).orderBy(desc(financialConditions.effectiveFrom)).limit(1),
-          tx.select({ hourlyRateCents: commercialConditions.hourlyRateCents }).from(commercialConditions).where(and(eq(commercialConditions.tenantId, tenantId), eq(commercialConditions.allocationId, current.allocationId), lte(commercialConditions.effectiveFrom, entry.workDate), or(isNull(commercialConditions.effectiveTo), gte(commercialConditions.effectiveTo, entry.workDate)))).orderBy(desc(commercialConditions.effectiveFrom)).limit(1),
+          tx.select({ hourlyRateCents: commercialConditions.hourlyRateCents }).from(commercialConditions).where(and(eq(commercialConditions.tenantId, tenantId), eq(commercialConditions.allocationId, entry.allocationId), lte(commercialConditions.effectiveFrom, entry.workDate), or(isNull(commercialConditions.effectiveTo), gte(commercialConditions.effectiveTo, entry.workDate)))).orderBy(desc(commercialConditions.effectiveFrom)).limit(1),
         ]);
         if (!financial) throw new InvalidApprovalError(`Cadastre uma condição financeira vigente em ${entry.workDate} antes de aprovar.`);
         if (!commercial) throw new InvalidApprovalError(`Cadastre uma condição comercial vigente em ${entry.workDate} antes de aprovar.`);

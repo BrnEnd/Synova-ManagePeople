@@ -20,7 +20,7 @@ export type RateCondition = {
 
 export type FinancialCondition = RateCondition & { employeeId: string };
 export type CommercialCondition = RateCondition & { allocationId: string };
-export type ApprovedWorkEntry = { allocationId: string; workDate: string; minutes: number; costAmountCents?: number; revenueAmountCents?: number };
+export type ApprovedWorkEntry = { allocationId: string; workDate: string; minutes: number; costAmountCents?: number; revenueAmountCents?: number; pricingComplete?: boolean };
 export type AllocationPeriod = {
   allocationId: string; clientName: string; managerName: string; startDate: string; endDate: string | null;
   contractType: string | null; financialRateCents: number | null; commercialRateCents: number | null;
@@ -31,7 +31,7 @@ export type AllocationUpdate = {
   tenantId: string; employeeId: string; allocationId: string; actorUserId: string;
   mode: 'replace' | 'stage' | 'end'; effectiveDate: string; previousEndDate: string;
   newAllocationId: string; contractId: string; financialConditionId: string; commercialConditionId: string;
-  clientId?: string; managerUserId?: string; roleTitle?: string | null; endDate?: string | null;
+  clientId?: string; managerUserId?: string; roleTitle?: string | null; endDate?: string | null; currentEndDate?: string;
   contractType?: string; financialRateCents?: number; commercialRateCents?: number; observations?: string | null;
 };
 
@@ -113,8 +113,8 @@ function buildHistory(input: { allocations: Array<Allocation & { commercialCondi
         startDate, endDate: endDate ?? null, contractType: contract?.contractType ?? null,
         financialRateCents: financial?.hourlyRateCents ?? null, commercialRateCents: commercial?.hourlyRateCents ?? null,
         approvedMinutes,
-        totalPaidCents: entries.length && entries.every((entry) => entry.costAmountCents !== undefined) ? entries.reduce((total, entry) => total + entry.costAmountCents!, 0) : financial ? Math.round(approvedMinutes * financial.hourlyRateCents / 60) : null,
-        totalReceivedCents: entries.length && entries.every((entry) => entry.revenueAmountCents !== undefined) ? entries.reduce((total, entry) => total + entry.revenueAmountCents!, 0) : commercial ? Math.round(approvedMinutes * commercial.hourlyRateCents / 60) : null,
+        totalPaidCents: entries.some((entry) => entry.pricingComplete === false) ? null : entries.length && entries.every((entry) => entry.costAmountCents !== undefined) ? entries.reduce((total, entry) => total + entry.costAmountCents!, 0) : financial ? Math.round(approvedMinutes * financial.hourlyRateCents / 60) : null,
+        totalReceivedCents: entries.some((entry) => entry.pricingComplete === false) ? null : entries.length && entries.every((entry) => entry.revenueAmountCents !== undefined) ? entries.reduce((total, entry) => total + entry.revenueAmountCents!, 0) : commercial ? Math.round(approvedMinutes * commercial.hourlyRateCents / 60) : null,
       });
     }
   }
@@ -212,19 +212,35 @@ export function createWorkforceModule(dependencies: { repository: WorkforceRepos
       return repository.addCommercialCondition(condition, latest?.effectiveTo ? null : latest?.id ?? null, latest ? previousDay(command.effectiveFrom) : null, command.actorUserId);
     },
 
-    async updateAllocation(command: { tenantId: string; employeeId: string; allocationId: string; actorUserId: string; mode: 'replace' | 'stage' | 'end'; effectiveDate: string; clientId?: string; managerUserId?: string; roleTitle?: string | null; endDate?: string | null; contractType?: string; financialRateCents?: number; commercialRateCents?: number; observations?: string | null }) {
+    async updateAllocation(command: { tenantId: string; employeeId: string; allocationId: string; actorUserId: string; mode: 'replace' | 'stage' | 'end'; effectiveDate: string; currentEndDate?: string; clientId?: string; managerUserId?: string; roleTitle?: string | null; endDate?: string | null; contractType?: string; financialRateCents?: number; commercialRateCents?: number; observations?: string | null }) {
       await employeeRequired(command.tenantId, command.employeeId);
-      const active = (await repository.listAllocations(command.tenantId, command.employeeId)).find((allocation) => allocation.id === command.allocationId && allocation.status === 'active');
+      const allocations = await repository.listAllocations(command.tenantId, command.employeeId);
+      const active = allocations.find((allocation) => allocation.id === command.allocationId && allocation.status === 'active');
       if (!active) throw new InvalidWorkforceError('Alocação ativa não encontrada.');
-      if (command.effectiveDate < active.startDate || (command.mode !== 'end' && command.effectiveDate === active.startDate)) throw new InvalidWorkforceError('A nova vigência deve iniciar após a etapa atual.');
-      if (command.mode !== 'end') {
+      const [contracts, financial, commercial] = await Promise.all([
+        repository.listContracts(command.tenantId, command.employeeId),
+        repository.listFinancialConditions(command.tenantId, command.employeeId),
+        repository.listCommercialConditions(command.tenantId, active.id),
+      ]);
+      const latestBoundary = [active.startDate, contracts[0]?.startDate, financial[0]?.effectiveFrom, commercial[0]?.effectiveFrom].filter((value): value is string => Boolean(value)).sort().at(-1)!;
+      if (command.effectiveDate < latestBoundary || (command.mode !== 'end' && command.effectiveDate === latestBoundary)) throw new InvalidWorkforceError('A nova vigência deve iniciar após a etapa atual.');
+      if (command.mode === 'replace') {
+        if (!command.currentEndDate) throw new InvalidWorkforceError('Informe o término da alocação atual.');
+        if (command.currentEndDate < latestBoundary || command.currentEndDate >= command.effectiveDate) throw new InvalidWorkforceError('O término atual deve respeitar a etapa vigente e anteceder o início da nova alocação.');
         if (!command.contractType?.trim()) throw new InvalidWorkforceError('Informe o tipo do contrato.');
         validateRate(command.financialRateCents ?? 0); validateRate(command.commercialRateCents ?? 0);
+      } else if (command.mode === 'stage') {
+        const hasChange = command.contractType !== undefined || command.financialRateCents !== undefined || command.commercialRateCents !== undefined || command.roleTitle !== undefined || command.endDate !== undefined;
+        if (!hasChange) throw new InvalidWorkforceError('Informe ao menos uma alteração para a nova etapa.');
+        if (command.contractType !== undefined && command.contractType.trim().length < 2) throw new InvalidWorkforceError('Informe o tipo do contrato.');
+        if (command.financialRateCents !== undefined) validateRate(command.financialRateCents);
+        if (command.commercialRateCents !== undefined) validateRate(command.commercialRateCents);
       }
       if (command.mode === 'replace' && (!command.clientId || !command.managerUserId)) throw new InvalidWorkforceError('Informe Cliente e Gestor da nova alocação.');
+      assertPeriod(command.effectiveDate, command.endDate);
       return repository.updateAllocation({
-        ...command, contractType: command.contractType?.trim(), roleTitle: optional(command.roleTitle), observations: optional(command.observations),
-        previousEndDate: command.mode === 'end' ? command.effectiveDate : previousDay(command.effectiveDate),
+        ...command, contractType: command.contractType?.trim(), roleTitle: command.roleTitle === undefined ? undefined : optional(command.roleTitle), observations: command.observations === undefined ? undefined : optional(command.observations),
+        previousEndDate: command.mode === 'replace' ? command.currentEndDate! : command.mode === 'end' ? command.effectiveDate : previousDay(command.effectiveDate),
         newAllocationId: dependencies.generateId(), contractId: dependencies.generateId(), financialConditionId: dependencies.generateId(), commercialConditionId: dependencies.generateId(),
       });
     },

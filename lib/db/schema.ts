@@ -418,6 +418,7 @@ export const competenceRateSnapshots = pgTable('competence_rate_snapshots', {
   commercialRateCents: integer('commercial_rate_cents').notNull(),
   costAmountCents: integer('cost_amount_cents').notNull(),
   revenueAmountCents: integer('revenue_amount_cents').notNull(),
+  pricingComplete: boolean('pricing_complete').notNull().default(true),
   createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
 }, (table) => [
   uniqueIndex('competence_rate_snapshots_entry_unique').on(table.tenantId, table.competenceId, table.timeEntryId),

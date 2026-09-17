@@ -11,6 +11,7 @@ function setup(detail: CompetenceDetail | null = baseDetail) {
   const repository: TimekeepingRepository = {
     openCompetence: vi.fn(async () => detail), listCompetencies: vi.fn(async () => detail ? [detail.competence] : []),
     getOwnedCompetence: vi.fn(async (tenantId, userId) => tenantId === 'tenant-a' && userId === 'user-a' ? detail : null),
+    allocationForDate: vi.fn(async () => 'allocation-a'),
     saveEntry: vi.fn(async (entry) => detail ? { ...detail, entries: [{ ...entry }], competence: { ...detail.competence, totalMinutes: entry.minutes } } : null),
     deleteEntry: vi.fn(async () => detail),
   };
@@ -35,6 +36,13 @@ describe('timekeeping module', () => {
     const { module, repository } = setup({ ...baseDetail, entries: [existing] });
     await module.saveEntry({ tenantId: 'tenant-a', userId: 'user-a', competenceId: 'competence-a', workDate: '2026-08-10', minutes: 480, observation: '  Entrega ' });
     expect(repository.saveEntry).toHaveBeenCalledWith(expect.objectContaining({ id: 'entry-a', minutes: 480, observation: 'Entrega', createdAt: existing.createdAt }), 'user-a');
+  });
+
+  it('atribui o apontamento à alocação vigente na data trabalhada', async () => {
+    const { module, repository } = setup();
+    vi.mocked(repository.allocationForDate).mockResolvedValue('allocation-b');
+    await module.saveEntry({ tenantId: 'tenant-a', userId: 'user-a', competenceId: 'competence-a', workDate: '2026-08-20', minutes: 480 });
+    expect(repository.saveEntry).toHaveBeenCalledWith(expect.objectContaining({ allocationId: 'allocation-b', workDate: '2026-08-20' }), 'user-a');
   });
 
   it('bloqueia data fora do mês, duração inválida e competência congelada', async () => {

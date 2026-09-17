@@ -145,6 +145,7 @@ export class PostgresWorkforceRepository implements WorkforceRepository {
     return withTenantTransaction(tenantId, (tx) => tx.select({
       allocationId: timeEntries.allocationId, workDate: competenceRateSnapshots.workDate, minutes: competenceRateSnapshots.minutes,
       costAmountCents: competenceRateSnapshots.costAmountCents, revenueAmountCents: competenceRateSnapshots.revenueAmountCents,
+      pricingComplete: competenceRateSnapshots.pricingComplete,
     }).from(competenceRateSnapshots).innerJoin(timeEntries, and(
       eq(timeEntries.tenantId, competenceRateSnapshots.tenantId), eq(timeEntries.id, competenceRateSnapshots.timeEntryId),
     )).where(and(eq(competenceRateSnapshots.tenantId, tenantId), eq(timeEntries.employeeId, employeeId))).orderBy(asc(competenceRateSnapshots.workDate)));
@@ -164,9 +165,11 @@ export class PostgresWorkforceRepository implements WorkforceRepository {
           eq(allocations.tenantId, command.tenantId), eq(allocations.id, current.id), eq(allocations.status, 'active'),
         ));
       }
-      await tx.update(commercialConditions).set({ effectiveTo: command.previousEndDate }).where(and(
-        eq(commercialConditions.tenantId, command.tenantId), eq(commercialConditions.allocationId, current.id), isNull(commercialConditions.effectiveTo),
-      ));
+      if (command.mode !== 'stage' || command.commercialRateCents !== undefined) {
+        await tx.update(commercialConditions).set({ effectiveTo: command.previousEndDate }).where(and(
+          eq(commercialConditions.tenantId, command.tenantId), eq(commercialConditions.allocationId, current.id), isNull(commercialConditions.effectiveTo),
+        ));
+      }
 
       if (command.mode === 'end') {
         await tx.insert(auditEvents).values({ id: randomUUID(), tenantId: command.tenantId, actorUserId: command.actorUserId, eventType: 'allocation.ended', entityType: 'employee', entityId: command.employeeId, metadata: { allocationId: current.id, endDate: command.effectiveDate }, occurredAt: at });
@@ -187,18 +190,24 @@ export class PostgresWorkforceRepository implements WorkforceRepository {
           createdByUserId: command.actorUserId, createdAt: at, endedAt: null,
         });
       } else {
-        await tx.update(allocations).set({ endDate: command.endDate ?? null }).where(and(
+        const changes: { endDate?: string | null; roleTitle?: string | null; observations?: string | null } = {};
+        if (command.endDate !== undefined) changes.endDate = command.endDate;
+        if (command.roleTitle !== undefined) changes.roleTitle = command.roleTitle;
+        if (command.observations !== undefined) changes.observations = command.observations;
+        if (Object.keys(changes).length) await tx.update(allocations).set(changes).where(and(
           eq(allocations.tenantId, command.tenantId), eq(allocations.id, current.id), eq(allocations.status, 'active'),
         ));
       }
 
-      await Promise.all([
-        tx.update(contracts).set({ endDate: command.previousEndDate, status: 'ended', endedAt: at }).where(and(eq(contracts.tenantId, command.tenantId), eq(contracts.employeeId, command.employeeId), eq(contracts.status, 'active'))),
-        tx.update(financialConditions).set({ effectiveTo: command.previousEndDate }).where(and(eq(financialConditions.tenantId, command.tenantId), eq(financialConditions.employeeId, command.employeeId), isNull(financialConditions.effectiveTo))),
-      ]);
-      await tx.insert(contracts).values({ id: command.contractId, tenantId: command.tenantId, employeeId: command.employeeId, documentId: null, contractType: command.contractType!, startDate: command.effectiveDate, endDate: command.endDate ?? null, status: 'active', observations: command.observations ?? null, createdByUserId: command.actorUserId, createdAt: at, endedAt: null });
-      await tx.insert(financialConditions).values({ id: command.financialConditionId, tenantId: command.tenantId, employeeId: command.employeeId, hourlyRateCents: command.financialRateCents!, effectiveFrom: command.effectiveDate, effectiveTo: null, observations: command.observations ?? null, createdByUserId: command.actorUserId, createdAt: at });
-      await tx.insert(commercialConditions).values({ id: command.commercialConditionId, tenantId: command.tenantId, allocationId: targetAllocationId, hourlyRateCents: command.commercialRateCents!, effectiveFrom: command.effectiveDate, effectiveTo: null, observations: command.observations ?? null, createdByUserId: command.actorUserId, createdAt: at });
+      if (command.contractType !== undefined) {
+        await tx.update(contracts).set({ endDate: command.previousEndDate, status: 'ended', endedAt: at }).where(and(eq(contracts.tenantId, command.tenantId), eq(contracts.employeeId, command.employeeId), eq(contracts.status, 'active')));
+        await tx.insert(contracts).values({ id: command.contractId, tenantId: command.tenantId, employeeId: command.employeeId, documentId: null, contractType: command.contractType, startDate: command.effectiveDate, endDate: command.endDate ?? null, status: 'active', observations: command.observations ?? null, createdByUserId: command.actorUserId, createdAt: at, endedAt: null });
+      }
+      if (command.financialRateCents !== undefined) {
+        await tx.update(financialConditions).set({ effectiveTo: command.previousEndDate }).where(and(eq(financialConditions.tenantId, command.tenantId), eq(financialConditions.employeeId, command.employeeId), isNull(financialConditions.effectiveTo)));
+        await tx.insert(financialConditions).values({ id: command.financialConditionId, tenantId: command.tenantId, employeeId: command.employeeId, hourlyRateCents: command.financialRateCents, effectiveFrom: command.effectiveDate, effectiveTo: null, observations: command.observations ?? null, createdByUserId: command.actorUserId, createdAt: at });
+      }
+      if (command.commercialRateCents !== undefined) await tx.insert(commercialConditions).values({ id: command.commercialConditionId, tenantId: command.tenantId, allocationId: targetAllocationId, hourlyRateCents: command.commercialRateCents, effectiveFrom: command.effectiveDate, effectiveTo: null, observations: command.observations ?? null, createdByUserId: command.actorUserId, createdAt: at });
       await tx.insert(auditEvents).values({ id: randomUUID(), tenantId: command.tenantId, actorUserId: command.actorUserId, eventType: command.mode === 'replace' ? 'allocation.replaced' : 'allocation.stage_created', entityType: 'employee', entityId: command.employeeId, metadata: { previousAllocationId: current.id, allocationId: targetAllocationId, effectiveDate: command.effectiveDate }, occurredAt: at });
     });
   }
