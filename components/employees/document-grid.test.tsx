@@ -10,10 +10,14 @@ describe('DocumentGrid', () => {
       { id: 'image', type: 'identification', originalName: 'rg.png', mimeType: 'image/png', size: 2048, createdAt: '2026-09-02T12:00:00.000Z' },
       { id: 'other', type: 'other', originalName: 'arquivo.bin', mimeType: 'application/octet-stream', size: 10, createdAt: '2026-09-03T12:00:00.000Z' },
     ]} />);
+    expect(screen.getByRole('table', { name: 'Documentos enviados' })).toBeTruthy();
+    expect(screen.getAllByRole('row')).toHaveLength(4);
+    expect(screen.getByRole('columnheader', { name: 'Tipo' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Arquivo' })).toBeTruthy();
+    expect(screen.getByRole('columnheader', { name: 'Ação' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Contrato' })).toBeTruthy();
-    expect(screen.getByTitle('Visualização de contrato.pdf').getAttribute('src')).toContain('/api/documents/pdf/download?preview=1');
-    expect(screen.getByRole('img', { name: 'Visualização de rg.png' }).getAttribute('src')).toContain('/api/documents/image/download?preview=1');
-    expect(screen.getByText('Pré-visualização indisponível.')).toBeTruthy();
+    expect(screen.queryByTitle('Visualização de contrato.pdf')).toBeNull();
+    expect(screen.queryByRole('img', { name: 'Visualização de rg.png' })).toBeNull();
     expect(screen.getAllByRole('link', { name: /Baixar/ })).toHaveLength(3);
   });
 });
