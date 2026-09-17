@@ -13,6 +13,13 @@ LEFT JOIN LATERAL (SELECT fc."hourly_rate_cents" FROM "financial_conditions" fc 
 LEFT JOIN LATERAL (SELECT cc."hourly_rate_cents" FROM "commercial_conditions" cc WHERE cc."tenant_id" = te."tenant_id" AND cc."allocation_id" = te."allocation_id" AND cc."effective_from" <= te."work_date" AND (cc."effective_to" IS NULL OR cc."effective_to" >= te."work_date") ORDER BY cc."effective_from" DESC LIMIT 1) commercial ON true
 WHERE c."status" IN ('awaiting_invoice', 'awaiting_payment', 'paid')
 ON CONFLICT DO NOTHING;--> statement-breakpoint
+UPDATE "competencies" c SET "approved_revenue_cents" = NULL
+WHERE EXISTS (
+  SELECT 1 FROM "competence_rate_snapshots" snapshots
+  WHERE snapshots."tenant_id" = c."tenant_id"
+    AND snapshots."competence_id" = c."id"
+    AND NOT snapshots."pricing_complete"
+);--> statement-breakpoint
 UPDATE "competencies" c SET "approved_revenue_cents" = totals.revenue
 FROM (
   SELECT "tenant_id", "competence_id", sum("revenue_amount_cents")::integer AS revenue
