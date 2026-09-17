@@ -132,7 +132,7 @@ try {
       await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
       const storedDocuments = await transaction`select pathname from documents where tenant_id = ${tenantId}`;
       for (const document of storedDocuments) if (!blobPaths.includes(document.pathname)) blobPaths.push(document.pathname);
-      for (const table of ['login_attempts', 'employee_notes', 'payments', 'notifications', 'competence_events', 'time_entries', 'competencies', 'commercial_conditions', 'financial_conditions', 'allocations', 'contracts', 'documents', 'clients', 'external_hiring_records', 'employees']) await transaction.unsafe(`delete from ${table} where tenant_id = $1`, [tenantId]);
+      for (const table of ['login_attempts', 'employee_notes', 'payments', 'notifications', 'competence_events', 'competence_rate_snapshots', 'time_entries', 'competencies', 'commercial_conditions', 'financial_conditions', 'allocations', 'contracts', 'documents', 'clients', 'external_hiring_records', 'employees']) await transaction.unsafe(`delete from ${table} where tenant_id = $1`, [tenantId]);
     });
     await privileged.begin(async (transaction) => {
       for (const table of ['idempotency_records', 'audit_events', 'service_keys', 'users']) await transaction.unsafe(`delete from ${table} where tenant_id = $1`, [tenantId]);

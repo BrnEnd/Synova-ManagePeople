@@ -313,7 +313,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       await timekeeping.saveEntry({ tenantId, userId: employeeUserResult.user.id, competenceId: competence.competence.id, workDate: '2026-08-04', minutes: 120, observation: 'Reunião e documentação' });
       await expect(approvals.submit({ tenantId, userId: employeeUserResult.user.id, competenceId: competence.competence.id })).resolves.toMatchObject({ competence: { status: 'awaiting_approval', revision: 2 } });
       const approved = await approvals.approve({ tenantId, managerUserId: userResult.user.id, competenceId: competence.competence.id });
-      expect(approved).toMatchObject({ competence: { status: 'awaiting_invoice', approvedMinutes: 570, hourlyRateCents: 10_000, approvedAmountCents: 95_000, revision: 2 } });
+      expect(approved).toMatchObject({ competence: { status: 'awaiting_invoice', approvedMinutes: 570, hourlyRateCents: 10_000, approvedAmountCents: 95_000, approvedRevenueCents: 190_000, revision: 2 } });
       expect(approved.events).toHaveLength(4);
       await expect(approvals.getForManager(otherTenant.tenant.id, userResult.user.id, competence.competence.id)).rejects.toThrow('Competência não encontrada.');
       await expect(approvals.listNotifications(tenantId, employeeUserResult.user.id)).resolves.toHaveLength(2);
@@ -333,7 +333,9 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
         activeEmployees: 1,
         newHires: 1,
         newHiresPending: 0,
-        notSubmitted: 0,
+        notSubmittedMinutes: 0,
+        notSubmittedRevenueProjectionCents: 0,
+        unpricedNotSubmittedMinutes: 0,
         awaitingApproval: 0,
         awaitingInvoice: 0,
         awaitingPayment: 0,
@@ -596,6 +598,7 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
           await transaction`delete from payments where tenant_id = ${tenantId}`;
           await transaction`delete from notifications where tenant_id = ${tenantId}`;
           await transaction`delete from competence_events where tenant_id = ${tenantId}`;
+          await transaction`delete from competence_rate_snapshots where tenant_id = ${tenantId}`;
           await transaction`delete from time_entries where tenant_id = ${tenantId}`;
           await transaction`delete from competencies where tenant_id = ${tenantId}`;
           await transaction`delete from commercial_conditions where tenant_id = ${tenantId}`;

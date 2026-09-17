@@ -5,10 +5,13 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { portalPath } from '@/lib/routing/base-path';
 
 type Condition = { id: string; hourlyRateCents: number; effectiveFrom: string; effectiveTo: string | null; observations: string | null };
+type AllocationPeriod = { allocationId: string; clientName: string; managerName: string; startDate: string; endDate: string | null; contractType: string | null; financialRateCents: number | null; commercialRateCents: number | null; approvedMinutes: number; totalPaidCents: number | null; totalReceivedCents: number | null };
 export type WorkforcePanelData = {
   contracts: Array<{ id: string; contractType: string; startDate: string; endDate: string | null; status: 'active' | 'ended'; observations: string | null; documentId: string | null }>;
   allocations: Array<{ id: string; clientName: string; managerName: string; roleTitle: string | null; startDate: string; endDate: string | null; status: 'active' | 'ended'; observations: string | null; commercialConditions: Condition[] }>;
   financialConditions: Condition[];
+  current: AllocationPeriod | null;
+  history: AllocationPeriod[];
   options: { clients: Array<{ id: string; name: string }>; managers: Array<{ id: string; name: string }> };
 };
 
@@ -23,6 +26,7 @@ export function WorkforcePanel({ employeeId, data, contractDocuments }: {
   const router = useRouter();
   const [busy, setBusy] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [updateMode, setUpdateMode] = useState<'replace' | 'stage' | 'end'>('stage');
 
   async function submit(event: FormEvent<HTMLFormElement>, endpoint: string, payload: (form: FormData) => object, success: string, key: string) {
     event.preventDefault(); setBusy(key); setFeedback(null);
@@ -44,11 +48,36 @@ export function WorkforcePanel({ employeeId, data, contractDocuments }: {
     <section className="space-y-6" aria-labelledby="workforce-title">
       <div className="border-b border-white/10 pb-4">
         <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-400">Relações profissionais</p>
-        <h2 className="mt-2 text-2xl font-black text-white" id="workforce-title">Contratos, alocações e valores</h2>
+        <h2 className="mt-2 text-2xl font-black text-white" id="workforce-title">Contratação, Alocação e Valores</h2>
         <p className="mt-2 text-sm text-zinc-400">Novas condições criam vigências. Períodos anteriores permanecem preservados.</p>
       </div>
 
       {feedback && <p aria-live="polite" role={feedback.type === 'error' ? 'alert' : undefined} className={`rounded-xl border px-4 py-3 text-sm ${feedback.type === 'error' ? 'border-red-400/20 bg-red-400/10 text-red-300' : 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200'}`}>{feedback.text}</p>}
+
+      <article className="rounded-3xl border border-orange-400/20 bg-zinc-900/70 p-5 sm:p-7">
+        <p className="text-xs font-black uppercase tracking-[0.18em] text-orange-400">Situação vigente</p>
+        {data.current ? <>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Metric label="Cliente" value={data.current.clientName} /><Metric label="Gestor responsável" value={data.current.managerName} />
+            <Metric label="Período" value={`${date(data.current.startDate)} → ${data.current.endDate ? date(data.current.endDate) : 'em aberto'}`} />
+            <Metric label="Tipo de contrato" value={data.current.contractType || 'Não informado'} />
+            <Metric label="Valor/hora pago" value={data.current.financialRateCents === null ? 'Não informado' : money.format(data.current.financialRateCents / 100)} />
+            <Metric label="Valor/hora recebido" value={data.current.commercialRateCents === null ? 'Não informado' : money.format(data.current.commercialRateCents / 100)} />
+          </div>
+          <form className="mt-6 grid gap-4 border-t border-white/10 pt-6 md:grid-cols-3" onSubmit={(event) => submit(event, `/api/allocations/${data.current!.allocationId}/update`, (form) => ({ employeeId, mode: updateMode, effectiveDate: value(form, 'effectiveDate'), clientId: optional(form, 'clientId'), managerUserId: optional(form, 'managerUserId'), roleTitle: optional(form, 'roleTitle'), endDate: optional(form, 'endDate'), contractType: updateMode === 'end' ? undefined : value(form, 'contractType'), financialRateCents: updateMode === 'end' ? undefined : Math.round(Number(value(form, 'financialRate')) * 100), commercialRateCents: updateMode === 'end' ? undefined : Math.round(Number(value(form, 'commercialRate')) * 100), observations: optional(form, 'observations') }), 'Alocação atualizada e histórico preservado.', 'update-allocation')}>
+            <label className="text-sm font-bold text-zinc-300 md:col-span-3">Atualizar alocação<select className="field mt-2" name="mode" value={updateMode} onChange={(event) => setUpdateMode(event.target.value as typeof updateMode)}><option value="stage">Criar nova etapa na alocação atual</option><option value="replace">Encerrar alocação atual e iniciar nova</option><option value="end">Apenas encerrar alocação atual</option></select></label>
+            <label className="text-sm font-bold text-zinc-300">{updateMode === 'end' ? 'Data de encerramento' : 'Início da nova vigência'}<input className="field mt-2" min={data.current.startDate} name="effectiveDate" required type="date" /></label>
+            {updateMode === 'replace' && <><label className="text-sm font-bold text-zinc-300">Cliente<select className="field mt-2" name="clientId" required><option value="">Selecione</option>{data.options.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label><label className="text-sm font-bold text-zinc-300">Gestor responsável<select className="field mt-2" name="managerUserId" required><option value="">Selecione</option>{data.options.managers.map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label></>}
+            {updateMode !== 'end' && <><label className="text-sm font-bold text-zinc-300">Tipo de contrato<input className="field mt-2" name="contractType" required /></label><label className="text-sm font-bold text-zinc-300">Valor/hora pago (R$)<input className="field mt-2" min="0.01" name="financialRate" required step="0.01" type="number" /></label><label className="text-sm font-bold text-zinc-300">Valor/hora recebido (R$)<input className="field mt-2" min="0.01" name="commercialRate" required step="0.01" type="number" /></label><label className="text-sm font-bold text-zinc-300">Término previsto<input className="field mt-2" name="endDate" type="date" /></label><label className="text-sm font-bold text-zinc-300">Função<input className="field mt-2" name="roleTitle" /></label></>}
+            <label className="text-sm font-bold text-zinc-300">Observações<input className="field mt-2" name="observations" /></label>
+            <button className="button-primary md:col-span-3" disabled={Boolean(busy)}>{busy === 'update-allocation' ? 'Atualizando…' : 'Confirmar atualização'}</button>
+          </form>
+        </> : <p className="mt-4 text-sm text-zinc-400">Funcionário sem alocação ativa. Use “Nova alocação” abaixo para iniciar uma.</p>}
+      </article>
+
+      <History title="Histórico de Alocações" empty="Nenhuma etapa registrada.">
+        {data.history.map((period) => <div className="border-t border-white/10 py-5 first:border-0" key={`${period.allocationId}-${period.startDate}`}><div className="flex flex-wrap justify-between gap-3"><div><p className="font-black text-white">{period.clientName}</p><p className="mt-1 text-sm text-zinc-400">{date(period.startDate)} → {period.endDate ? date(period.endDate) : 'em aberto'} · {period.contractType || 'Contrato não informado'} · Gestor: {period.managerName}</p></div><p className="font-black text-orange-300">{Math.floor(period.approvedMinutes / 60)}h{period.approvedMinutes % 60 ? ` ${period.approvedMinutes % 60}min` : ''} aprovadas</p></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Valor/hora pago" value={period.financialRateCents === null ? 'Indisponível' : money.format(period.financialRateCents / 100)} /><Metric label="Valor/hora recebido" value={period.commercialRateCents === null ? 'Indisponível' : money.format(period.commercialRateCents / 100)} /><Metric label="Total pago" value={period.totalPaidCents === null ? 'Indisponível' : money.format(period.totalPaidCents / 100)} /><Metric label="Total recebido" value={period.totalReceivedCents === null ? 'Indisponível' : money.format(period.totalReceivedCents / 100)} /></div></div>)}
+      </History>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <article className="rounded-3xl border border-white/10 bg-zinc-900/70 p-5 sm:p-7">
@@ -119,3 +148,4 @@ function History({ title, empty, children }: { title: string; empty: string; chi
 }
 function Status({ status }: { status: 'active' | 'ended' }) { return <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${status === 'active' ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200' : 'border-white/10 bg-white/5 text-zinc-400'}`}>{status === 'active' ? 'Ativo' : 'Encerrado'}</span>; }
 function ConditionRow({ condition }: { condition: Condition }) { return <div className="border-t border-white/10 py-3 first:border-0"><p className="font-bold text-white">{money.format(condition.hourlyRateCents / 100)} / hora</p><p className="mt-1 text-sm text-zinc-400">{date(condition.effectiveFrom)} → {condition.effectiveTo ? date(condition.effectiveTo) : 'vigente'}</p>{condition.observations && <p className="mt-1 text-sm text-zinc-500">{condition.observations}</p>}</div>; }
+function Metric({ label, value }: { label: string; value: string }) { return <div><p className="text-xs font-black uppercase tracking-wider text-zinc-600">{label}</p><p className="mt-1 font-bold text-white">{value}</p></div>; }

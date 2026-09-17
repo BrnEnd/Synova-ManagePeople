@@ -4,7 +4,7 @@ export type Competence = {
   id: string; tenantId: string; employeeId: string; allocationId: string; clientId: string; managerUserId: string;
   clientName: string; managerName: string; referenceMonth: string; status: CompetenceStatus; totalMinutes: number;
   revision: number; submittedAt: Date | null; approvedAt: Date | null; approvedByUserId: string | null;
-  approvedMinutes: number | null; hourlyRateCents: number | null; approvedAmountCents: number | null;
+  approvedMinutes: number | null; hourlyRateCents: number | null; approvedAmountCents: number | null; approvedRevenueCents?: number | null;
   adjustmentReason: string | null; createdAt: Date; updatedAt: Date;
   forecastDocumentId: string | null; invoiceDocumentId: string | null;
 };

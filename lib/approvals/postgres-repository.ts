@@ -1,11 +1,12 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
-import { allocations, auditEvents, clients, competenceEvents, competencies, employees, financialConditions, notifications, tenants, timeEntries, users } from '@/lib/db/schema';
+import { allocations, auditEvents, clients, commercialConditions, competenceEvents, competenceRateSnapshots, competencies, employees, financialConditions, notifications, tenants, timeEntries, users } from '@/lib/db/schema';
 import { getProvisioningDb } from '@/lib/db/client';
 import { withTenantTransaction, type DatabaseTransaction } from '@/lib/db/transactions';
 import { InvalidApprovalError, type ApprovalRepository, type CompetenceReview } from '@/lib/approvals/module';
 import type { CompetenceStatus } from '@/lib/timekeeping/module';
+import type { ManagementScope } from '@/lib/management/scope';
 
 const selection = {
   id: competencies.id, tenantId: competencies.tenantId, employeeId: competencies.employeeId,
@@ -14,17 +15,17 @@ const selection = {
   referenceMonth: competencies.referenceMonth, status: competencies.status, totalMinutes: competencies.totalMinutes,
   revision: competencies.revision, submittedAt: competencies.submittedAt, approvedAt: competencies.approvedAt,
   approvedByUserId: competencies.approvedByUserId, approvedMinutes: competencies.approvedMinutes,
-  hourlyRateCents: competencies.hourlyRateCents, approvedAmountCents: competencies.approvedAmountCents,
+  hourlyRateCents: competencies.hourlyRateCents, approvedAmountCents: competencies.approvedAmountCents, approvedRevenueCents: competencies.approvedRevenueCents,
   adjustmentReason: competencies.adjustmentReason, createdAt: competencies.createdAt, updatedAt: competencies.updatedAt,
   forecastDocumentId: competencies.forecastDocumentId, invoiceDocumentId: competencies.invoiceDocumentId,
 };
 
-async function managerReview(tx: DatabaseTransaction, tenantId: string, managerUserId: string, competenceId: string): Promise<CompetenceReview | null> {
+async function managerReview(tx: DatabaseTransaction, tenantId: string, managerUserId: string, competenceId: string, scope: ManagementScope = 'mine'): Promise<CompetenceReview | null> {
   const [competence] = await tx.select(selection).from(competencies)
     .innerJoin(employees, and(eq(employees.tenantId, competencies.tenantId), eq(employees.id, competencies.employeeId)))
     .innerJoin(clients, and(eq(clients.tenantId, competencies.tenantId), eq(clients.id, competencies.clientId)))
     .innerJoin(users, and(eq(users.tenantId, competencies.tenantId), eq(users.id, competencies.managerUserId)))
-    .where(and(eq(competencies.tenantId, tenantId), eq(competencies.id, competenceId), eq(competencies.managerUserId, managerUserId))).limit(1);
+    .where(and(eq(competencies.tenantId, tenantId), eq(competencies.id, competenceId), scope === 'mine' ? eq(competencies.managerUserId, managerUserId) : undefined)).limit(1);
   if (!competence) return null;
   const [entries, events] = await Promise.all([
     tx.select().from(timeEntries).where(and(eq(timeEntries.tenantId, tenantId), eq(timeEntries.competenceId, competenceId))).orderBy(asc(timeEntries.workDate)),
@@ -55,14 +56,14 @@ export class PostgresApprovalRepository implements ApprovalRepository {
     });
   }
 
-  listForManager(tenantId: string, managerUserId: string, statuses: CompetenceStatus[] = ['awaiting_approval', 'awaiting_payment']) {
+  listForManager(tenantId: string, managerUserId: string, statuses: CompetenceStatus[] = ['awaiting_approval', 'awaiting_payment'], scope: ManagementScope = 'mine') {
     return withTenantTransaction(tenantId, async (tx) => {
-      const rows = await tx.select({ id: competencies.id }).from(competencies).where(and(eq(competencies.tenantId, tenantId), eq(competencies.managerUserId, managerUserId), inArray(competencies.status, statuses))).orderBy(asc(competencies.submittedAt));
-      return Promise.all(rows.map((row) => managerReview(tx, tenantId, managerUserId, row.id))) as Promise<CompetenceReview[]>;
+      const rows = await tx.select({ id: competencies.id }).from(competencies).where(and(eq(competencies.tenantId, tenantId), scope === 'mine' ? eq(competencies.managerUserId, managerUserId) : undefined, inArray(competencies.status, statuses))).orderBy(asc(competencies.submittedAt));
+      return Promise.all(rows.map((row) => managerReview(tx, tenantId, managerUserId, row.id, scope))) as Promise<CompetenceReview[]>;
     });
   }
 
-  getForManager(tenantId: string, managerUserId: string, competenceId: string) { return withTenantTransaction(tenantId, (tx) => managerReview(tx, tenantId, managerUserId, competenceId)); }
+  getForManager(tenantId: string, managerUserId: string, competenceId: string, scope: ManagementScope = 'mine') { return withTenantTransaction(tenantId, (tx) => managerReview(tx, tenantId, managerUserId, competenceId, scope)); }
 
   requestAdjustments(tenantId: string, managerUserId: string, competenceId: string, reason: string, eventId: string, notificationId: string, at: Date) {
     return withTenantTransaction(tenantId, async (tx) => {
@@ -80,20 +81,30 @@ export class PostgresApprovalRepository implements ApprovalRepository {
 
   approve(tenantId: string, managerUserId: string, competenceId: string, eventId: string, notificationId: string, at: Date) {
     return withTenantTransaction(tenantId, async (tx) => {
-      const [current] = await tx.select({ employeeId: competencies.employeeId, totalMinutes: competencies.totalMinutes, referenceMonth: competencies.referenceMonth, revision: competencies.revision }).from(competencies).where(and(eq(competencies.tenantId, tenantId), eq(competencies.id, competenceId), eq(competencies.managerUserId, managerUserId), eq(competencies.status, 'awaiting_approval'))).limit(1);
+      const [current] = await tx.select({ employeeId: competencies.employeeId, allocationId: competencies.allocationId, totalMinutes: competencies.totalMinutes, revision: competencies.revision }).from(competencies).where(and(eq(competencies.tenantId, tenantId), eq(competencies.id, competenceId), eq(competencies.managerUserId, managerUserId), eq(competencies.status, 'awaiting_approval'))).limit(1);
       if (!current) return null;
-      const [year, month] = current.referenceMonth.split('-').map(Number); const endDate = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-      const [[condition], [employee]] = await Promise.all([
-        tx.select({ hourlyRateCents: financialConditions.hourlyRateCents }).from(financialConditions).where(and(eq(financialConditions.tenantId, tenantId), eq(financialConditions.employeeId, current.employeeId), lte(financialConditions.effectiveFrom, endDate), or(isNull(financialConditions.effectiveTo), gte(financialConditions.effectiveTo, endDate)))).orderBy(desc(financialConditions.effectiveFrom)).limit(1),
+      const [entries, [employee]] = await Promise.all([
+        tx.select({ id: timeEntries.id, workDate: timeEntries.workDate, minutes: timeEntries.minutes }).from(timeEntries).where(and(eq(timeEntries.tenantId, tenantId), eq(timeEntries.competenceId, competenceId))).orderBy(asc(timeEntries.workDate)),
         tx.select({ userId: employees.userId }).from(employees).where(and(eq(employees.tenantId, tenantId), eq(employees.id, current.employeeId))).limit(1),
       ]);
-      if (!condition) throw new InvalidApprovalError('Cadastre uma condição financeira vigente antes de aprovar.');
       if (!employee?.userId) throw new InvalidApprovalError('O funcionário não possui usuário associado.');
-      const approvedAmountCents = Math.round(condition.hourlyRateCents * current.totalMinutes / 60);
-      await tx.update(competencies).set({ status: 'awaiting_invoice', approvedAt: at, approvedByUserId: managerUserId, approvedMinutes: current.totalMinutes, hourlyRateCents: condition.hourlyRateCents, approvedAmountCents, updatedAt: at }).where(and(eq(competencies.tenantId, tenantId), eq(competencies.id, competenceId), eq(competencies.status, 'awaiting_approval')));
-      await tx.insert(competenceEvents).values({ id: eventId, tenantId, competenceId, actorUserId: managerUserId, eventType: 'competence.approved', fromStatus: 'awaiting_approval', toStatus: 'awaiting_invoice', metadata: { revision: current.revision, approvedMinutes: current.totalMinutes, hourlyRateCents: condition.hourlyRateCents, approvedAmountCents }, occurredAt: at });
+      const pricedEntries = await Promise.all(entries.map(async (entry) => {
+        const [[financial], [commercial]] = await Promise.all([
+          tx.select({ hourlyRateCents: financialConditions.hourlyRateCents }).from(financialConditions).where(and(eq(financialConditions.tenantId, tenantId), eq(financialConditions.employeeId, current.employeeId), lte(financialConditions.effectiveFrom, entry.workDate), or(isNull(financialConditions.effectiveTo), gte(financialConditions.effectiveTo, entry.workDate)))).orderBy(desc(financialConditions.effectiveFrom)).limit(1),
+          tx.select({ hourlyRateCents: commercialConditions.hourlyRateCents }).from(commercialConditions).where(and(eq(commercialConditions.tenantId, tenantId), eq(commercialConditions.allocationId, current.allocationId), lte(commercialConditions.effectiveFrom, entry.workDate), or(isNull(commercialConditions.effectiveTo), gte(commercialConditions.effectiveTo, entry.workDate)))).orderBy(desc(commercialConditions.effectiveFrom)).limit(1),
+        ]);
+        if (!financial) throw new InvalidApprovalError(`Cadastre uma condição financeira vigente em ${entry.workDate} antes de aprovar.`);
+        if (!commercial) throw new InvalidApprovalError(`Cadastre uma condição comercial vigente em ${entry.workDate} antes de aprovar.`);
+        return { ...entry, financialRateCents: financial.hourlyRateCents, commercialRateCents: commercial.hourlyRateCents, costAmountCents: Math.round(entry.minutes * financial.hourlyRateCents / 60), revenueAmountCents: Math.round(entry.minutes * commercial.hourlyRateCents / 60) };
+      }));
+      const approvedAmountCents = pricedEntries.reduce((total, entry) => total + entry.costAmountCents, 0);
+      const approvedRevenueCents = pricedEntries.reduce((total, entry) => total + entry.revenueAmountCents, 0);
+      const hourlyRateCents = Math.round(approvedAmountCents * 60 / current.totalMinutes);
+      await tx.insert(competenceRateSnapshots).values(pricedEntries.map((entry) => ({ id: randomUUID(), tenantId, competenceId, timeEntryId: entry.id, workDate: entry.workDate, minutes: entry.minutes, financialRateCents: entry.financialRateCents, commercialRateCents: entry.commercialRateCents, costAmountCents: entry.costAmountCents, revenueAmountCents: entry.revenueAmountCents, createdAt: at })));
+      await tx.update(competencies).set({ status: 'awaiting_invoice', approvedAt: at, approvedByUserId: managerUserId, approvedMinutes: current.totalMinutes, hourlyRateCents, approvedAmountCents, approvedRevenueCents, updatedAt: at }).where(and(eq(competencies.tenantId, tenantId), eq(competencies.id, competenceId), eq(competencies.status, 'awaiting_approval')));
+      await tx.insert(competenceEvents).values({ id: eventId, tenantId, competenceId, actorUserId: managerUserId, eventType: 'competence.approved', fromStatus: 'awaiting_approval', toStatus: 'awaiting_invoice', metadata: { revision: current.revision, approvedMinutes: current.totalMinutes, hourlyRateCents, approvedAmountCents, approvedRevenueCents }, occurredAt: at });
       await notify(tx, { id: notificationId, tenantId, recipientUserId: employee.userId, competenceId, type: 'hours_approved', title: 'Horas aprovadas', message: 'Suas horas foram aprovadas. A previsão de pagamento será disponibilizada.', key: `competence:${competenceId}:approved:${current.revision}`, at });
-      await tx.insert(auditEvents).values({ id: randomUUID(), tenantId, actorUserId: managerUserId, eventType: 'competence.approved', entityType: 'competence', entityId: competenceId, metadata: { approvedMinutes: current.totalMinutes, hourlyRateCents: condition.hourlyRateCents, approvedAmountCents }, occurredAt: at });
+      await tx.insert(auditEvents).values({ id: randomUUID(), tenantId, actorUserId: managerUserId, eventType: 'competence.approved', entityType: 'competence', entityId: competenceId, metadata: { approvedMinutes: current.totalMinutes, hourlyRateCents, approvedAmountCents, approvedRevenueCents }, occurredAt: at });
       return managerReview(tx, tenantId, managerUserId, competenceId);
     });
   }

@@ -4,7 +4,7 @@ import { managerAccess, managerAccessResponse } from '@/lib/identity/access';
 import { getEmployeesModule } from '@/lib/employees/server';
 import { getCurrentIdentity } from '@/lib/identity/server';
 
-export async function GET(_request: Request, context: RouteContext<'/api/documents/[documentId]/download'>) {
+export async function GET(request: Request, context: RouteContext<'/api/documents/[documentId]/download'>) {
   const identity = await getCurrentIdentity();
   if (!identity) return managerAccessResponse('unauthenticated');
   if (identity.mustChangePassword) return managerAccessResponse('password_change_required');
@@ -18,7 +18,8 @@ export async function GET(_request: Request, context: RouteContext<'/api/documen
     const headers = new Headers();
     headers.set('content-type', document.mimeType);
     headers.set('content-length', String(document.size));
-    headers.set('content-disposition', `attachment; filename*=UTF-8''${encodeURIComponent(document.originalName)}`);
+    const disposition = new URL(request.url).searchParams.get('preview') === '1' ? 'inline' : 'attachment';
+    headers.set('content-disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(document.originalName)}`);
     headers.set('cache-control', 'private, no-store');
     return new Response(content.body, { headers });
   } catch (error) {

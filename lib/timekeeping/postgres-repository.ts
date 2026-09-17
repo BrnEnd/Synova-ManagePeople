@@ -17,7 +17,7 @@ const competenceSelection = {
   status: competencies.status, totalMinutes: competencies.totalMinutes, revision: competencies.revision,
   submittedAt: competencies.submittedAt, approvedAt: competencies.approvedAt, approvedByUserId: competencies.approvedByUserId,
   approvedMinutes: competencies.approvedMinutes, hourlyRateCents: competencies.hourlyRateCents,
-  approvedAmountCents: competencies.approvedAmountCents, adjustmentReason: competencies.adjustmentReason,
+  approvedAmountCents: competencies.approvedAmountCents, approvedRevenueCents: competencies.approvedRevenueCents, adjustmentReason: competencies.adjustmentReason,
   forecastDocumentId: competencies.forecastDocumentId, invoiceDocumentId: competencies.invoiceDocumentId,
   createdAt: competencies.createdAt, updatedAt: competencies.updatedAt,
 };

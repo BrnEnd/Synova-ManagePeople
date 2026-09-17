@@ -1,8 +1,12 @@
+import type { ManagementScope } from '@/lib/management/scope';
+
 export type DashboardSnapshot = {
   activeEmployees: number;
   newHires: number;
   newHiresPending: number;
-  notSubmitted: number;
+  notSubmittedMinutes: number;
+  notSubmittedRevenueProjectionCents: number;
+  unpricedNotSubmittedMinutes: number;
   awaitingApproval: number;
   awaitingInvoice: number;
   awaitingPayment: number;
@@ -11,7 +15,7 @@ export type DashboardSnapshot = {
 };
 
 export type DashboardRepository = {
-  load(tenantId: string, managerUserId: string, period: { referenceMonth: string; monthStart: Date; nextMonthStart: Date; monthEnd: string }): Promise<DashboardSnapshot>;
+  load(tenantId: string, managerUserId: string, scope: ManagementScope, period: { referenceMonth: string; monthStart: Date; nextMonthStart: Date; monthEnd: string }): Promise<DashboardSnapshot>;
 };
 
 export function saoPauloMonth(now: Date) {
@@ -30,8 +34,8 @@ export function saoPauloMonth(now: Date) {
 
 export function createDashboardModule(dependencies: { repository: DashboardRepository; now: () => Date }) {
   return {
-    load(tenantId: string, managerUserId: string) {
-      return dependencies.repository.load(tenantId, managerUserId, saoPauloMonth(dependencies.now()));
+    load(tenantId: string, managerUserId: string, scope: ManagementScope = 'mine') {
+      return dependencies.repository.load(tenantId, managerUserId, scope, saoPauloMonth(dependencies.now()));
     },
   };
 }

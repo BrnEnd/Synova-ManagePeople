@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "allocations_employee_active_unique" ON "allocations" USING btree ("tenant_id","employee_id") WHERE "allocations"."status" = 'active';

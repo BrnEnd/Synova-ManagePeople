@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { EmployeePortalAccess } from '@/components/employees/employee-portal-access';
+import { DocumentGrid } from '@/components/employees/document-grid';
 import { portalPath } from '@/lib/routing/base-path';
 
 type EmployeeDetailData = {
@@ -68,13 +69,6 @@ const pendingLabels: Record<string, string> = {
   entryDate: 'Data de entrada',
   professionalTitle: 'Cargo ou função',
   identificationDocumentFile: 'Arquivo de identificação',
-};
-
-const documentLabels: Record<string, string> = {
-  identification: 'Identificação',
-  address_proof: 'Comprovante de endereço',
-  contract: 'Contrato',
-  other: 'Outro documento',
 };
 
 const eventLabels: Record<string, string> = {
@@ -286,14 +280,7 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
               <button className="pressable rounded-full border border-orange-400/30 px-5 py-3 font-black text-orange-300 disabled:cursor-wait disabled:opacity-60" disabled={busy !== null} type="submit">{busy === 'document' ? (progress ? `${progress}%` : 'Enviando…') : 'Enviar'}</button>
             </form>
             <p className="mt-3 text-xs text-zinc-600">PDF, JPEG, PNG ou WebP, até 25 MB. Downloads passam pela autorização do tenant.</p>
-            <ul className="mt-5 divide-y divide-white/8 border-t border-white/8">
-              {detail.documents.length === 0 ? <li className="py-5 text-sm text-zinc-500">Nenhum documento recebido.</li> : detail.documents.map((document) => (
-                <li className="flex flex-wrap items-center justify-between gap-3 py-4" key={document.id}>
-                  <div><p className="font-bold text-white">{document.originalName}</p><p className="mt-1 text-xs text-zinc-500">{documentLabels[document.type] || document.type} · {(document.size / 1024 / 1024).toFixed(2)} MB · {new Intl.DateTimeFormat('pt-BR').format(new Date(document.createdAt))}</p></div>
-                  <a className="pressable rounded-full border border-white/10 px-4 py-2 text-sm font-bold text-zinc-300" href={portalPath(`/api/documents/${document.id}/download`)}>Baixar</a>
-                </li>
-              ))}
-            </ul>
+            <DocumentGrid documents={detail.documents} />
           </section>
 
           <section className="rounded-3xl border border-white/10 bg-zinc-900/70 p-5 sm:p-7">

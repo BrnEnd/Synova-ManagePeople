@@ -1,5 +1,6 @@
 import { isLastNationalBusinessDay, saoPauloDate } from '@/lib/calendar/business-days';
 import type { Competence, CompetenceStatus, TimeEntry } from '@/lib/timekeeping/module';
+import type { ManagementScope } from '@/lib/management/scope';
 
 export type CompetenceEvent = { id: string; eventType: string; fromStatus: string; toStatus: string; reason: string | null; actorName: string | null; occurredAt: Date };
 export type CompetenceReview = { competence: Competence & { employeeName: string }; entries: TimeEntry[]; events: CompetenceEvent[] };
@@ -7,8 +8,8 @@ export type Notification = { id: string; type: string; title: string; message: s
 
 export type ApprovalRepository = {
   submit(tenantId: string, employeeUserId: string, competenceId: string, eventId: string, notificationId: string, at: Date): Promise<CompetenceReview | null>;
-  listForManager(tenantId: string, managerUserId: string, statuses?: CompetenceStatus[]): Promise<CompetenceReview[]>;
-  getForManager(tenantId: string, managerUserId: string, competenceId: string): Promise<CompetenceReview | null>;
+  listForManager(tenantId: string, managerUserId: string, statuses?: CompetenceStatus[], scope?: ManagementScope): Promise<CompetenceReview[]>;
+  getForManager(tenantId: string, managerUserId: string, competenceId: string, scope?: ManagementScope): Promise<CompetenceReview | null>;
   requestAdjustments(tenantId: string, managerUserId: string, competenceId: string, reason: string, eventId: string, notificationId: string, at: Date): Promise<CompetenceReview | null>;
   approve(tenantId: string, managerUserId: string, competenceId: string, eventId: string, notificationId: string, at: Date): Promise<CompetenceReview | null>;
   listNotifications(tenantId: string, recipientUserId: string): Promise<Notification[]>;
@@ -26,9 +27,9 @@ export function createApprovalsModule(dependencies: { repository: ApprovalReposi
       if (!review) throw new Error('Competência não encontrada.');
       return review;
     },
-    listForManager(tenantId: string, managerUserId: string, statuses?: CompetenceStatus[]) { return dependencies.repository.listForManager(tenantId, managerUserId, statuses); },
-    async getForManager(tenantId: string, managerUserId: string, competenceId: string) {
-      const review = await dependencies.repository.getForManager(tenantId, managerUserId, competenceId);
+    listForManager(tenantId: string, managerUserId: string, statuses?: CompetenceStatus[], scope: ManagementScope = 'mine') { return dependencies.repository.listForManager(tenantId, managerUserId, statuses, scope); },
+    async getForManager(tenantId: string, managerUserId: string, competenceId: string, scope: ManagementScope = 'mine') {
+      const review = await dependencies.repository.getForManager(tenantId, managerUserId, competenceId, scope);
       if (!review) throw new Error('Competência não encontrada.'); return review;
     },
     async requestAdjustments(command: { tenantId: string; managerUserId: string; competenceId: string; reason: string }) {

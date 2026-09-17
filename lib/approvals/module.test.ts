@@ -25,6 +25,14 @@ describe('approvals module', () => {
     await expect(module.approve({ tenantId: 'tenant-a', managerUserId: 'manager-b', competenceId: 'competence-a' })).rejects.toThrow('Competência não encontrada.');
   });
 
+  it('encaminha o escopo de leitura sem ampliar os comandos do gestor responsável', async () => {
+    const { module, repository } = setup();
+    await module.listForManager('tenant-a', 'manager-a', undefined, 'all');
+    await expect(module.getForManager('tenant-a', 'manager-a', 'competence-a', 'all')).rejects.toThrow('Competência não encontrada.');
+    expect(repository.listForManager).toHaveBeenCalledWith('tenant-a', 'manager-a', undefined, 'all');
+    expect(repository.getForManager).toHaveBeenCalledWith('tenant-a', 'manager-a', 'competence-a', 'all');
+  });
+
   it('processa lembretes uma vez por tenant no último dia útil de São Paulo', async () => {
     const { module, repository } = setup();
     await expect(module.runMonthCloseReminders()).resolves.toEqual({ processed: true, localDate: '2026-08-31', notifications: 3 });

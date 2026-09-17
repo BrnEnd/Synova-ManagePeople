@@ -239,6 +239,7 @@ export const allocations = pgTable('allocations', {
   endedAt: timestamp('ended_at', { withTimezone: true, mode: 'date' }),
 }, (table) => [
   uniqueIndex('allocations_tenant_id_id_unique').on(table.tenantId, table.id),
+  uniqueIndex('allocations_employee_active_unique').on(table.tenantId, table.employeeId).where(sql`${table.status} = 'active'`),
   index('allocations_tenant_employee_start_idx').on(table.tenantId, table.employeeId, table.startDate),
   index('allocations_tenant_client_status_idx').on(table.tenantId, table.clientId, table.status),
   foreignKey({ columns: [table.tenantId, table.employeeId], foreignColumns: [employees.tenantId, employees.id], name: 'allocations_tenant_employee_fk' }),
@@ -307,6 +308,7 @@ export const competencies = pgTable('competencies', {
   approvedMinutes: integer('approved_minutes'),
   hourlyRateCents: integer('hourly_rate_cents'),
   approvedAmountCents: integer('approved_amount_cents'),
+  approvedRevenueCents: integer('approved_revenue_cents'),
   adjustmentReason: text('adjustment_reason'),
   forecastDocumentId: uuid('forecast_document_id'),
   invoiceDocumentId: uuid('invoice_document_id'),
@@ -403,6 +405,26 @@ export const timeEntries = pgTable('time_entries', {
   foreignKey({ columns: [table.tenantId, table.employeeId], foreignColumns: [employees.tenantId, employees.id], name: 'time_entries_tenant_employee_fk' }),
   foreignKey({ columns: [table.tenantId, table.allocationId], foreignColumns: [allocations.tenantId, allocations.id], name: 'time_entries_tenant_allocation_fk' }),
   check('time_entries_minutes_check', sql`${table.minutes} > 0 and ${table.minutes} <= 1440`),
+]);
+
+export const competenceRateSnapshots = pgTable('competence_rate_snapshots', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  competenceId: uuid('competence_id').notNull(),
+  timeEntryId: uuid('time_entry_id').notNull(),
+  workDate: date('work_date', { mode: 'string' }).notNull(),
+  minutes: integer('minutes').notNull(),
+  financialRateCents: integer('financial_rate_cents').notNull(),
+  commercialRateCents: integer('commercial_rate_cents').notNull(),
+  costAmountCents: integer('cost_amount_cents').notNull(),
+  revenueAmountCents: integer('revenue_amount_cents').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('competence_rate_snapshots_entry_unique').on(table.tenantId, table.competenceId, table.timeEntryId),
+  index('competence_rate_snapshots_competence_idx').on(table.tenantId, table.competenceId),
+  foreignKey({ columns: [table.tenantId, table.competenceId], foreignColumns: [competencies.tenantId, competencies.id], name: 'competence_rate_snapshots_tenant_competence_fk' }),
+  foreignKey({ columns: [table.tenantId, table.timeEntryId], foreignColumns: [timeEntries.tenantId, timeEntries.id], name: 'competence_rate_snapshots_tenant_entry_fk' }),
+  check('competence_rate_snapshots_minutes_check', sql`${table.minutes} > 0 and ${table.minutes} <= 1440`),
 ]);
 
 export const serviceKeys = pgTable('service_keys', {

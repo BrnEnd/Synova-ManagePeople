@@ -16,3 +16,11 @@ export const rateConditionSchema = z.object({
   hourlyRateCents: z.number().int().positive().max(100_000_000), effectiveFrom: z.iso.date(), observations: optionalText(2000),
 }).strict();
 export const endPeriodSchema = z.object({ endDate: z.iso.date() }).strict();
+export const allocationUpdateSchema = z.object({
+  employeeId: z.uuid(), mode: z.enum(['replace', 'stage', 'end']), effectiveDate: z.iso.date(),
+  clientId: z.union([z.uuid(), z.literal(''), z.null()]).optional().transform((value) => value || undefined),
+  managerUserId: z.union([z.uuid(), z.literal(''), z.null()]).optional().transform((value) => value || undefined),
+  roleTitle: optionalText(160), endDate: z.union([z.iso.date(), z.literal(''), z.null()]).optional().transform((value) => value || null),
+  contractType: z.string().trim().max(80).optional(), financialRateCents: z.number().int().positive().max(100_000_000).optional(),
+  commercialRateCents: z.number().int().positive().max(100_000_000).optional(), observations: optionalText(2000),
+}).strict();

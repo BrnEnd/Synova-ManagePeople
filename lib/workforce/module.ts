@@ -20,11 +20,27 @@ export type RateCondition = {
 
 export type FinancialCondition = RateCondition & { employeeId: string };
 export type CommercialCondition = RateCondition & { allocationId: string };
+export type ApprovedWorkEntry = { allocationId: string; workDate: string; minutes: number; costAmountCents?: number; revenueAmountCents?: number };
+export type AllocationPeriod = {
+  allocationId: string; clientName: string; managerName: string; startDate: string; endDate: string | null;
+  contractType: string | null; financialRateCents: number | null; commercialRateCents: number | null;
+  approvedMinutes: number; totalPaidCents: number | null; totalReceivedCents: number | null;
+};
+
+export type AllocationUpdate = {
+  tenantId: string; employeeId: string; allocationId: string; actorUserId: string;
+  mode: 'replace' | 'stage' | 'end'; effectiveDate: string; previousEndDate: string;
+  newAllocationId: string; contractId: string; financialConditionId: string; commercialConditionId: string;
+  clientId?: string; managerUserId?: string; roleTitle?: string | null; endDate?: string | null;
+  contractType?: string; financialRateCents?: number; commercialRateCents?: number; observations?: string | null;
+};
 
 export type WorkforceDetail = {
   contracts: Contract[];
   allocations: Array<Allocation & { commercialConditions: CommercialCondition[] }>;
   financialConditions: FinancialCondition[];
+  current: AllocationPeriod | null;
+  history: AllocationPeriod[];
   options: { clients: Array<{ id: string; name: string }>; managers: Array<{ id: string; name: string }> };
 };
 
@@ -43,6 +59,8 @@ export type WorkforceRepository = {
   listCommercialConditions(tenantId: string, allocationId: string): Promise<CommercialCondition[]>;
   addCommercialCondition(condition: CommercialCondition, previousId: string | null, previousEnd: string | null, actorUserId: string): Promise<CommercialCondition>;
   listOptions(tenantId: string): Promise<WorkforceDetail['options']>;
+  listApprovedEntries(tenantId: string, employeeId: string): Promise<ApprovedWorkEntry[]>;
+  updateAllocation(command: AllocationUpdate): Promise<void>;
 };
 
 export class InvalidWorkforceError extends Error {
@@ -67,6 +85,42 @@ function validateRate(hourlyRateCents: number) {
   }
 }
 
+function activeOn<T extends { effectiveFrom: string; effectiveTo: string | null }>(items: T[], date: string) {
+  return items.find((item) => item.effectiveFrom <= date && (!item.effectiveTo || item.effectiveTo >= date)) ?? null;
+}
+
+function buildHistory(input: { allocations: Array<Allocation & { commercialConditions: CommercialCondition[] }>; contracts: Contract[]; financial: FinancialCondition[]; entries: ApprovedWorkEntry[] }): AllocationPeriod[] {
+  const periods: AllocationPeriod[] = [];
+  for (const allocation of input.allocations) {
+    const boundaries = new Set([allocation.startDate]);
+    for (const date of [
+      ...allocation.commercialConditions.map((item) => item.effectiveFrom),
+      ...input.financial.map((item) => item.effectiveFrom),
+      ...input.contracts.map((item) => item.startDate),
+    ]) if (date >= allocation.startDate && (!allocation.endDate || date <= allocation.endDate)) boundaries.add(date);
+    const starts = [...boundaries].sort();
+    for (let index = 0; index < starts.length; index += 1) {
+      const startDate = starts[index];
+      const nextStart = starts[index + 1];
+      const endDate = nextStart ? previousDay(nextStart) : allocation.endDate;
+      const financial = activeOn(input.financial, startDate);
+      const commercial = activeOn(allocation.commercialConditions, startDate);
+      const contract = input.contracts.find((item) => item.startDate <= startDate && (!item.endDate || item.endDate >= startDate)) ?? null;
+      const entries = input.entries.filter((entry) => entry.allocationId === allocation.id && entry.workDate >= startDate && (!endDate || entry.workDate <= endDate));
+      const approvedMinutes = entries.reduce((total, entry) => total + entry.minutes, 0);
+      periods.push({
+        allocationId: allocation.id, clientName: allocation.clientName, managerName: allocation.managerName,
+        startDate, endDate: endDate ?? null, contractType: contract?.contractType ?? null,
+        financialRateCents: financial?.hourlyRateCents ?? null, commercialRateCents: commercial?.hourlyRateCents ?? null,
+        approvedMinutes,
+        totalPaidCents: entries.length && entries.every((entry) => entry.costAmountCents !== undefined) ? entries.reduce((total, entry) => total + entry.costAmountCents!, 0) : financial ? Math.round(approvedMinutes * financial.hourlyRateCents / 60) : null,
+        totalReceivedCents: entries.length && entries.every((entry) => entry.revenueAmountCents !== undefined) ? entries.reduce((total, entry) => total + entry.revenueAmountCents!, 0) : commercial ? Math.round(approvedMinutes * commercial.hourlyRateCents / 60) : null,
+      });
+    }
+  }
+  return periods.sort((a, b) => b.startDate.localeCompare(a.startDate));
+}
+
 export function createWorkforceModule(dependencies: { repository: WorkforceRepository; generateId: () => string; now: () => Date }) {
   const { repository } = dependencies;
 
@@ -77,12 +131,15 @@ export function createWorkforceModule(dependencies: { repository: WorkforceRepos
   return {
     async detail(tenantId: string, employeeId: string): Promise<WorkforceDetail | null> {
       if (!await repository.employeeExists(tenantId, employeeId)) return null;
-      const [contracts, allocations, financialConditions, options] = await Promise.all([
+      const [contracts, allocations, financialConditions, options, approvedEntries] = await Promise.all([
         repository.listContracts(tenantId, employeeId), repository.listAllocations(tenantId, employeeId),
-        repository.listFinancialConditions(tenantId, employeeId), repository.listOptions(tenantId),
+        repository.listFinancialConditions(tenantId, employeeId), repository.listOptions(tenantId), repository.listApprovedEntries(tenantId, employeeId),
       ]);
       const commercial = await Promise.all(allocations.map((allocation) => repository.listCommercialConditions(tenantId, allocation.id)));
-      return { contracts, allocations: allocations.map((allocation, index) => ({ ...allocation, commercialConditions: commercial[index] })), financialConditions, options };
+      const enriched = allocations.map((allocation, index) => ({ ...allocation, commercialConditions: commercial[index] }));
+      const history = buildHistory({ allocations: enriched, contracts, financial: financialConditions, entries: approvedEntries });
+      const activeAllocation = allocations.find((allocation) => allocation.status === 'active');
+      return { contracts, allocations: enriched, financialConditions, options, history, current: history.find((period) => period.allocationId === activeAllocation?.id) ?? null };
     },
 
     async createContract(command: { tenantId: string; employeeId: string; actorUserId: string; contractType: string; startDate: string; endDate?: string | null; documentId?: string | null; observations?: string | null }) {
@@ -153,6 +210,23 @@ export function createWorkforceModule(dependencies: { repository: WorkforceRepos
         observations: optional(command.observations), createdByUserId: command.actorUserId, createdAt: dependencies.now(),
       };
       return repository.addCommercialCondition(condition, latest?.effectiveTo ? null : latest?.id ?? null, latest ? previousDay(command.effectiveFrom) : null, command.actorUserId);
+    },
+
+    async updateAllocation(command: { tenantId: string; employeeId: string; allocationId: string; actorUserId: string; mode: 'replace' | 'stage' | 'end'; effectiveDate: string; clientId?: string; managerUserId?: string; roleTitle?: string | null; endDate?: string | null; contractType?: string; financialRateCents?: number; commercialRateCents?: number; observations?: string | null }) {
+      await employeeRequired(command.tenantId, command.employeeId);
+      const active = (await repository.listAllocations(command.tenantId, command.employeeId)).find((allocation) => allocation.id === command.allocationId && allocation.status === 'active');
+      if (!active) throw new InvalidWorkforceError('Alocação ativa não encontrada.');
+      if (command.effectiveDate < active.startDate || (command.mode !== 'end' && command.effectiveDate === active.startDate)) throw new InvalidWorkforceError('A nova vigência deve iniciar após a etapa atual.');
+      if (command.mode !== 'end') {
+        if (!command.contractType?.trim()) throw new InvalidWorkforceError('Informe o tipo do contrato.');
+        validateRate(command.financialRateCents ?? 0); validateRate(command.commercialRateCents ?? 0);
+      }
+      if (command.mode === 'replace' && (!command.clientId || !command.managerUserId)) throw new InvalidWorkforceError('Informe Cliente e Gestor da nova alocação.');
+      return repository.updateAllocation({
+        ...command, contractType: command.contractType?.trim(), roleTitle: optional(command.roleTitle), observations: optional(command.observations),
+        previousEndDate: command.mode === 'end' ? command.effectiveDate : previousDay(command.effectiveDate),
+        newAllocationId: dependencies.generateId(), contractId: dependencies.generateId(), financialConditionId: dependencies.generateId(), commercialConditionId: dependencies.generateId(),
+      });
     },
   };
 }

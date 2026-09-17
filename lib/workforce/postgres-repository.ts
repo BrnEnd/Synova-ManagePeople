@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, isNull, lte, ne } from 'drizzle-orm';
 import {
   allocations, auditEvents, clients, commercialConditions, contracts, documents,
-  employees, financialConditions, users,
+  competenceRateSnapshots, employees, financialConditions, timeEntries, users,
 } from '@/lib/db/schema';
 import { withTenantTransaction } from '@/lib/db/transactions';
-import { InvalidWorkforceError, type Allocation, type CommercialCondition, type Contract, type FinancialCondition, type WorkforceRepository } from '@/lib/workforce/module';
+import { InvalidWorkforceError, type Allocation, type AllocationUpdate, type CommercialCondition, type Contract, type FinancialCondition, type WorkforceRepository } from '@/lib/workforce/module';
 
 export class PostgresWorkforceRepository implements WorkforceRepository {
   async employeeExists(tenantId: string, employeeId: string) {
@@ -59,6 +59,10 @@ export class PostgresWorkforceRepository implements WorkforceRepository {
 
   async createAllocation(allocation: Omit<Allocation, 'clientName' | 'managerName'>, actorUserId: string) {
     return withTenantTransaction(allocation.tenantId, async (tx) => {
+      const [active] = await tx.select({ id: allocations.id }).from(allocations).where(and(
+        eq(allocations.tenantId, allocation.tenantId), eq(allocations.employeeId, allocation.employeeId), eq(allocations.status, 'active'),
+      )).limit(1);
+      if (active) throw new InvalidWorkforceError('O funcionário já possui uma alocação ativa.');
       const [[client], [manager]] = await Promise.all([
         tx.select({ id: clients.id, name: clients.name }).from(clients).where(and(eq(clients.tenantId, allocation.tenantId), eq(clients.id, allocation.clientId), eq(clients.status, 'active'))).limit(1),
         tx.select({ id: users.id, name: users.displayName }).from(users).where(and(eq(users.tenantId, allocation.tenantId), eq(users.id, allocation.managerUserId), eq(users.role, 'manager'), eq(users.status, 'active'))).limit(1),
@@ -134,6 +138,68 @@ export class PostgresWorkforceRepository implements WorkforceRepository {
       const [created] = await tx.insert(commercialConditions).values(condition).returning();
       await tx.insert(auditEvents).values({ id: randomUUID(), tenantId: condition.tenantId, actorUserId, eventType: 'commercial_condition.created', entityType: 'allocation', entityId: condition.allocationId, metadata: { conditionId: condition.id, hourlyRateCents: condition.hourlyRateCents, effectiveFrom: condition.effectiveFrom }, occurredAt: condition.createdAt });
       return created;
+    });
+  }
+
+  listApprovedEntries(tenantId: string, employeeId: string) {
+    return withTenantTransaction(tenantId, (tx) => tx.select({
+      allocationId: timeEntries.allocationId, workDate: competenceRateSnapshots.workDate, minutes: competenceRateSnapshots.minutes,
+      costAmountCents: competenceRateSnapshots.costAmountCents, revenueAmountCents: competenceRateSnapshots.revenueAmountCents,
+    }).from(competenceRateSnapshots).innerJoin(timeEntries, and(
+      eq(timeEntries.tenantId, competenceRateSnapshots.tenantId), eq(timeEntries.id, competenceRateSnapshots.timeEntryId),
+    )).where(and(eq(competenceRateSnapshots.tenantId, tenantId), eq(timeEntries.employeeId, employeeId))).orderBy(asc(competenceRateSnapshots.workDate)));
+  }
+
+  updateAllocation(command: AllocationUpdate) {
+    return withTenantTransaction(command.tenantId, async (tx) => {
+      const [current] = await tx.select().from(allocations).where(and(
+        eq(allocations.tenantId, command.tenantId), eq(allocations.id, command.allocationId),
+        eq(allocations.employeeId, command.employeeId), eq(allocations.status, 'active'),
+      )).limit(1);
+      if (!current) throw new InvalidWorkforceError('Alocação ativa não encontrada.');
+      const at = new Date();
+
+      if (command.mode === 'replace' || command.mode === 'end') {
+        await tx.update(allocations).set({ endDate: command.previousEndDate, status: 'ended', endedAt: at }).where(and(
+          eq(allocations.tenantId, command.tenantId), eq(allocations.id, current.id), eq(allocations.status, 'active'),
+        ));
+      }
+      await tx.update(commercialConditions).set({ effectiveTo: command.previousEndDate }).where(and(
+        eq(commercialConditions.tenantId, command.tenantId), eq(commercialConditions.allocationId, current.id), isNull(commercialConditions.effectiveTo),
+      ));
+
+      if (command.mode === 'end') {
+        await tx.insert(auditEvents).values({ id: randomUUID(), tenantId: command.tenantId, actorUserId: command.actorUserId, eventType: 'allocation.ended', entityType: 'employee', entityId: command.employeeId, metadata: { allocationId: current.id, endDate: command.effectiveDate }, occurredAt: at });
+        return;
+      }
+
+      const targetAllocationId = command.mode === 'replace' ? command.newAllocationId : current.id;
+      if (command.mode === 'replace') {
+        const [[client], [manager]] = await Promise.all([
+          tx.select({ id: clients.id }).from(clients).where(and(eq(clients.tenantId, command.tenantId), eq(clients.id, command.clientId!), eq(clients.status, 'active'))).limit(1),
+          tx.select({ id: users.id }).from(users).where(and(eq(users.tenantId, command.tenantId), eq(users.id, command.managerUserId!), eq(users.role, 'manager'), eq(users.status, 'active'))).limit(1),
+        ]);
+        if (!client || !manager) throw new InvalidWorkforceError('Selecione Cliente e Gestor ativos deste tenant.');
+        await tx.insert(allocations).values({
+          id: command.newAllocationId, tenantId: command.tenantId, employeeId: command.employeeId,
+          clientId: command.clientId!, managerUserId: command.managerUserId!, roleTitle: command.roleTitle ?? null,
+          startDate: command.effectiveDate, endDate: command.endDate ?? null, status: 'active', observations: command.observations ?? null,
+          createdByUserId: command.actorUserId, createdAt: at, endedAt: null,
+        });
+      } else {
+        await tx.update(allocations).set({ endDate: command.endDate ?? null }).where(and(
+          eq(allocations.tenantId, command.tenantId), eq(allocations.id, current.id), eq(allocations.status, 'active'),
+        ));
+      }
+
+      await Promise.all([
+        tx.update(contracts).set({ endDate: command.previousEndDate, status: 'ended', endedAt: at }).where(and(eq(contracts.tenantId, command.tenantId), eq(contracts.employeeId, command.employeeId), eq(contracts.status, 'active'))),
+        tx.update(financialConditions).set({ effectiveTo: command.previousEndDate }).where(and(eq(financialConditions.tenantId, command.tenantId), eq(financialConditions.employeeId, command.employeeId), isNull(financialConditions.effectiveTo))),
+      ]);
+      await tx.insert(contracts).values({ id: command.contractId, tenantId: command.tenantId, employeeId: command.employeeId, documentId: null, contractType: command.contractType!, startDate: command.effectiveDate, endDate: command.endDate ?? null, status: 'active', observations: command.observations ?? null, createdByUserId: command.actorUserId, createdAt: at, endedAt: null });
+      await tx.insert(financialConditions).values({ id: command.financialConditionId, tenantId: command.tenantId, employeeId: command.employeeId, hourlyRateCents: command.financialRateCents!, effectiveFrom: command.effectiveDate, effectiveTo: null, observations: command.observations ?? null, createdByUserId: command.actorUserId, createdAt: at });
+      await tx.insert(commercialConditions).values({ id: command.commercialConditionId, tenantId: command.tenantId, allocationId: targetAllocationId, hourlyRateCents: command.commercialRateCents!, effectiveFrom: command.effectiveDate, effectiveTo: null, observations: command.observations ?? null, createdByUserId: command.actorUserId, createdAt: at });
+      await tx.insert(auditEvents).values({ id: randomUUID(), tenantId: command.tenantId, actorUserId: command.actorUserId, eventType: command.mode === 'replace' ? 'allocation.replaced' : 'allocation.stage_created', entityType: 'employee', entityId: command.employeeId, metadata: { previousAllocationId: current.id, allocationId: targetAllocationId, effectiveDate: command.effectiveDate }, occurredAt: at });
     });
   }
 
