@@ -8,7 +8,7 @@ function setup(overrides: Partial<WorkforceRepository> = {}) {
     documentBelongsToEmployee: vi.fn(async (tenantId, documentId, employeeId) => tenantId === 'tenant-a' && documentId === 'document-a' && employeeId === 'employee-a'),
     allocationExists: vi.fn(async (tenantId, allocationId) => tenantId === 'tenant-a' && allocationId === 'allocation-a'),
     createContract: vi.fn(async (contract) => contract), listContracts: vi.fn(async () => []),
-    endContract: vi.fn(async () => null), createAllocation: vi.fn(async (allocation) => ({ ...allocation, clientName: 'Cliente', managerName: 'Gestor' })),
+    endContract: vi.fn(async () => null), createAllocation: vi.fn(async ({ allocation }) => ({ ...allocation, clientName: 'Cliente', managerName: 'Gestor' })),
     listAllocations: vi.fn(async () => []), endAllocation: vi.fn(async () => null), listFinancialConditions: vi.fn(async () => []),
     addFinancialCondition: vi.fn(async (condition) => condition), listCommercialConditions: vi.fn(async () => []),
     addCommercialCondition: vi.fn(async (condition) => condition), listOptions: vi.fn(async () => ({ clients: [], managers: [] })),
@@ -37,6 +37,22 @@ describe('workforce module', () => {
     const { module } = setup();
     await expect(module.createContract({ tenantId: 'tenant-a', employeeId: 'employee-a', actorUserId: 'manager-a', contractType: 'PJ', startDate: '2026-09-01', endDate: '2026-08-31' })).rejects.toBeInstanceOf(InvalidWorkforceError);
     await expect(module.createAllocation({ tenantId: 'tenant-b', employeeId: 'employee-a', actorUserId: 'manager-b', clientId: 'client-a', managerUserId: 'manager-b', startDate: '2026-08-01' })).rejects.toThrow('Funcionário não encontrado.');
+  });
+
+  it('inicia a alocação com custo e preço comercial na mesma operação', async () => {
+    const createAllocation = vi.fn(async ({ allocation }) => ({ ...allocation, clientName: 'Cliente', managerName: 'Gestor' }));
+    const { module } = setup({ createAllocation });
+
+    await module.createAllocation({
+      tenantId: 'tenant-a', employeeId: 'employee-a', actorUserId: 'manager-a', clientId: 'client-a', managerUserId: 'manager-a',
+      roleTitle: 'Consultora', startDate: '2026-08-01', financialRateCents: 10_000, commercialRateCents: 20_000,
+    });
+
+    expect(createAllocation).toHaveBeenCalledWith(expect.objectContaining({
+      allocation: expect.objectContaining({ startDate: '2026-08-01' }),
+      financialCondition: expect.objectContaining({ hourlyRateCents: 10_000, effectiveFrom: '2026-08-01' }),
+      commercialCondition: expect.objectContaining({ hourlyRateCents: 20_000, effectiveFrom: '2026-08-01' }),
+    }), 'manager-a');
   });
 
   it('versiona a condição financeira fechando a vigência anterior no dia precedente', async () => {

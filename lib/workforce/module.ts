@@ -20,6 +20,11 @@ export type RateCondition = {
 
 export type FinancialCondition = RateCondition & { employeeId: string };
 export type CommercialCondition = RateCondition & { allocationId: string };
+export type AllocationCreation = {
+  allocation: Omit<Allocation, 'clientName' | 'managerName'>;
+  financialCondition?: FinancialCondition;
+  commercialCondition?: CommercialCondition;
+};
 export type ApprovedWorkEntry = { allocationId: string; workDate: string; minutes: number; costAmountCents?: number; revenueAmountCents?: number; pricingComplete?: boolean };
 export type AllocationPeriod = {
   allocationId: string; clientName: string; managerName: string; startDate: string; endDate: string | null;
@@ -51,7 +56,7 @@ export type WorkforceRepository = {
   createContract(contract: Contract, actorUserId: string): Promise<Contract>;
   listContracts(tenantId: string, employeeId: string): Promise<Contract[]>;
   endContract(tenantId: string, contractId: string, endDate: string, actorUserId: string, at: Date): Promise<Contract | null>;
-  createAllocation(allocation: Omit<Allocation, 'clientName' | 'managerName'>, actorUserId: string): Promise<Allocation>;
+  createAllocation(creation: AllocationCreation, actorUserId: string): Promise<Allocation>;
   listAllocations(tenantId: string, employeeId: string): Promise<Allocation[]>;
   endAllocation(tenantId: string, allocationId: string, endDate: string, actorUserId: string, at: Date): Promise<Allocation | null>;
   listFinancialConditions(tenantId: string, employeeId: string): Promise<FinancialCondition[]>;
@@ -166,15 +171,35 @@ export function createWorkforceModule(dependencies: { repository: WorkforceRepos
       return ended;
     },
 
-    async createAllocation(command: { tenantId: string; employeeId: string; actorUserId: string; clientId: string; managerUserId: string; roleTitle?: string | null; startDate: string; endDate?: string | null; observations?: string | null }) {
+    async createAllocation(command: { tenantId: string; employeeId: string; actorUserId: string; clientId: string; managerUserId: string; roleTitle?: string | null; startDate: string; endDate?: string | null; financialRateCents?: number; commercialRateCents?: number; observations?: string | null }) {
       await employeeRequired(command.tenantId, command.employeeId);
       assertPeriod(command.startDate, command.endDate);
       const now = dependencies.now();
+      const hasFinancialRate = command.financialRateCents !== undefined;
+      const hasCommercialRate = command.commercialRateCents !== undefined;
+      if (hasFinancialRate !== hasCommercialRate) throw new InvalidWorkforceError('Informe o valor-hora pago e o valor-hora recebido juntos.');
+      if (hasFinancialRate && hasCommercialRate) {
+        validateRate(command.financialRateCents!);
+        validateRate(command.commercialRateCents!);
+      }
+      const allocationId = dependencies.generateId();
       return repository.createAllocation({
-        id: dependencies.generateId(), tenantId: command.tenantId, employeeId: command.employeeId,
-        clientId: command.clientId, managerUserId: command.managerUserId, roleTitle: optional(command.roleTitle),
-        startDate: command.startDate, endDate: command.endDate ?? null, status: 'active',
-        observations: optional(command.observations), createdByUserId: command.actorUserId, createdAt: now, endedAt: null,
+        allocation: {
+          id: allocationId, tenantId: command.tenantId, employeeId: command.employeeId,
+          clientId: command.clientId, managerUserId: command.managerUserId, roleTitle: optional(command.roleTitle),
+          startDate: command.startDate, endDate: command.endDate ?? null, status: 'active',
+          observations: optional(command.observations), createdByUserId: command.actorUserId, createdAt: now, endedAt: null,
+        },
+        financialCondition: hasFinancialRate ? {
+          id: dependencies.generateId(), tenantId: command.tenantId, employeeId: command.employeeId,
+          hourlyRateCents: command.financialRateCents!, effectiveFrom: command.startDate, effectiveTo: null,
+          observations: optional(command.observations), createdByUserId: command.actorUserId, createdAt: now,
+        } : undefined,
+        commercialCondition: hasCommercialRate ? {
+          id: dependencies.generateId(), tenantId: command.tenantId, allocationId,
+          hourlyRateCents: command.commercialRateCents!, effectiveFrom: command.startDate, effectiveTo: null,
+          observations: optional(command.observations), createdByUserId: command.actorUserId, createdAt: now,
+        } : undefined,
       }, command.actorUserId);
     },
 

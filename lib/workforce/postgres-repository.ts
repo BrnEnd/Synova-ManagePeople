@@ -6,7 +6,7 @@ import {
   competenceRateSnapshots, employees, financialConditions, timeEntries, users,
 } from '@/lib/db/schema';
 import { withTenantTransaction } from '@/lib/db/transactions';
-import { InvalidWorkforceError, type Allocation, type AllocationUpdate, type CommercialCondition, type Contract, type FinancialCondition, type WorkforceRepository } from '@/lib/workforce/module';
+import { InvalidWorkforceError, type AllocationCreation, type AllocationUpdate, type CommercialCondition, type Contract, type FinancialCondition, type WorkforceRepository } from '@/lib/workforce/module';
 
 export class PostgresWorkforceRepository implements WorkforceRepository {
   async employeeExists(tenantId: string, employeeId: string) {
@@ -57,7 +57,8 @@ export class PostgresWorkforceRepository implements WorkforceRepository {
     });
   }
 
-  async createAllocation(allocation: Omit<Allocation, 'clientName' | 'managerName'>, actorUserId: string) {
+  async createAllocation(creation: AllocationCreation, actorUserId: string) {
+    const { allocation, financialCondition, commercialCondition } = creation;
     return withTenantTransaction(allocation.tenantId, async (tx) => {
       const [active] = await tx.select({ id: allocations.id }).from(allocations).where(and(
         eq(allocations.tenantId, allocation.tenantId), eq(allocations.employeeId, allocation.employeeId), eq(allocations.status, 'active'),
@@ -69,12 +70,51 @@ export class PostgresWorkforceRepository implements WorkforceRepository {
       ]);
       if (!client) throw new InvalidWorkforceError('Selecione um cliente ativo deste tenant.');
       if (!manager) throw new InvalidWorkforceError('Selecione um gestor ativo deste tenant.');
+
+      let createFinancial = financialCondition;
+      if (financialCondition) {
+        const [openFinancial] = await tx.select().from(financialConditions).where(and(
+          eq(financialConditions.tenantId, allocation.tenantId), eq(financialConditions.employeeId, allocation.employeeId), isNull(financialConditions.effectiveTo),
+        )).limit(1);
+        if (openFinancial?.effectiveFrom === financialCondition.effectiveFrom) {
+          if (openFinancial.hourlyRateCents !== financialCondition.hourlyRateCents) {
+            throw new InvalidWorkforceError('Já existe uma condição financeira com início nesta data e valor diferente.');
+          }
+          createFinancial = undefined;
+        } else if (openFinancial) {
+          if (openFinancial.effectiveFrom > financialCondition.effectiveFrom) {
+            throw new InvalidWorkforceError('A condição financeira vigente começa depois da nova alocação.');
+          }
+          const priorEnd = new Date(`${financialCondition.effectiveFrom}T00:00:00.000Z`);
+          priorEnd.setUTCDate(priorEnd.getUTCDate() - 1);
+          await tx.update(financialConditions).set({ effectiveTo: priorEnd.toISOString().slice(0, 10) }).where(and(
+            eq(financialConditions.tenantId, allocation.tenantId), eq(financialConditions.id, openFinancial.id), isNull(financialConditions.effectiveTo),
+          ));
+        }
+      }
+
       const [created] = await tx.insert(allocations).values(allocation).returning();
       await tx.insert(auditEvents).values({
         id: randomUUID(), tenantId: allocation.tenantId, actorUserId, eventType: 'allocation.created',
         entityType: 'employee', entityId: allocation.employeeId,
         metadata: { allocationId: allocation.id, clientId: allocation.clientId, managerUserId: allocation.managerUserId, startDate: allocation.startDate }, occurredAt: allocation.createdAt,
       });
+      if (createFinancial) {
+        await tx.insert(financialConditions).values(createFinancial);
+        await tx.insert(auditEvents).values({
+          id: randomUUID(), tenantId: allocation.tenantId, actorUserId, eventType: 'financial_condition.created',
+          entityType: 'employee', entityId: allocation.employeeId,
+          metadata: { conditionId: createFinancial.id, hourlyRateCents: createFinancial.hourlyRateCents, effectiveFrom: createFinancial.effectiveFrom }, occurredAt: createFinancial.createdAt,
+        });
+      }
+      if (commercialCondition) {
+        await tx.insert(commercialConditions).values(commercialCondition);
+        await tx.insert(auditEvents).values({
+          id: randomUUID(), tenantId: allocation.tenantId, actorUserId, eventType: 'commercial_condition.created',
+          entityType: 'allocation', entityId: allocation.id,
+          metadata: { conditionId: commercialCondition.id, hourlyRateCents: commercialCondition.hourlyRateCents, effectiveFrom: commercialCondition.effectiveFrom }, occurredAt: commercialCondition.createdAt,
+        });
+      }
       return { ...created, clientName: client.name, managerName: manager.name };
     });
   }

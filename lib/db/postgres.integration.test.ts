@@ -283,11 +283,9 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       });
       const allocation = await workforce.createAllocation({
         tenantId, employeeId: employee.id, actorUserId: userResult.user.id, clientId: client.id,
-        managerUserId: userResult.user.id, roleTitle: 'Consultora', startDate: '2026-08-01',
+        managerUserId: userResult.user.id, roleTitle: 'Consultora', startDate: '2026-08-01', financialRateCents: 10_000, commercialRateCents: 20_000,
       });
-      await workforce.addFinancialCondition({ tenantId, employeeId: employee.id, actorUserId: userResult.user.id, hourlyRateCents: 10_000, effectiveFrom: '2026-08-01' });
       await workforce.addFinancialCondition({ tenantId, employeeId: employee.id, actorUserId: userResult.user.id, hourlyRateCents: 12_000, effectiveFrom: '2026-09-01' });
-      await workforce.addCommercialCondition({ tenantId, allocationId: allocation.id, actorUserId: userResult.user.id, hourlyRateCents: 20_000, effectiveFrom: '2026-08-01' });
       const workforceDetail = await workforce.detail(tenantId, employee.id);
       expect(workforceDetail).toMatchObject({
         contracts: [{ id: contract.id }],

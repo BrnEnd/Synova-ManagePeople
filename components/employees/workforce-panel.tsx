@@ -79,7 +79,6 @@ export function WorkforcePanel({ employeeId, data, contractDocuments }: {
       </History>
 
       {!data.current && <>
-      <div className="grid gap-6 xl:grid-cols-2">
         <article className="rounded-3xl border border-white/10 bg-zinc-900/70 p-5 sm:p-7">
           <h3 className="text-lg font-black text-white">Novo contrato</h3>
           <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={(event) => submit(event, `/api/employees/${employeeId}/contracts`, (form) => ({ contractType: value(form, 'contractType'), startDate: value(form, 'startDate'), endDate: optional(form, 'endDate'), documentId: optional(form, 'documentId'), observations: optional(form, 'observations') }), 'Contrato registrado no histórico.', 'contract')}>
@@ -92,26 +91,17 @@ export function WorkforcePanel({ employeeId, data, contractDocuments }: {
           </form>
         </article>
 
-        <article className="rounded-3xl border border-white/10 bg-zinc-900/70 p-5 sm:p-7">
-          <h3 className="text-lg font-black text-white">Nova condição financeira</h3>
-          <p className="mt-2 text-sm text-zinc-400">Custo do funcionário. O pagamento usará valor-hora vigente × horas aprovadas.</p>
-          <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={(event) => submit(event, `/api/employees/${employeeId}/financial-conditions`, (form) => ({ hourlyRateCents: Math.round(Number(value(form, 'hourlyRate')) * 100), effectiveFrom: value(form, 'effectiveFrom'), observations: optional(form, 'observations') }), 'Nova condição financeira vigente.', 'financial')}>
-            <label className="text-sm font-bold text-zinc-300">Valor-hora (R$)<input className="field mt-2" min="0.01" name="hourlyRate" required step="0.01" type="number" /></label>
-            <label className="text-sm font-bold text-zinc-300">Vigência inicial<input className="field mt-2" name="effectiveFrom" required type="date" /></label>
-            <label className="text-sm font-bold text-zinc-300 sm:col-span-2">Observações<textarea className="field mt-2 min-h-20" maxLength={2000} name="observations" /></label>
-            <button className="button-primary sm:col-span-2" disabled={Boolean(busy)}>{busy === 'financial' ? 'Registrando…' : 'Criar nova vigência'}</button>
-          </form>
-        </article>
-      </div>
-
       <article className="rounded-3xl border border-white/10 bg-zinc-900/70 p-5 sm:p-7">
         <h3 className="text-lg font-black text-white">Nova alocação</h3>
-        <form className="mt-5 grid gap-4 md:grid-cols-3" onSubmit={(event) => submit(event, `/api/employees/${employeeId}/allocations`, (form) => ({ clientId: value(form, 'clientId'), managerUserId: value(form, 'managerUserId'), roleTitle: optional(form, 'roleTitle'), startDate: value(form, 'startDate'), endDate: optional(form, 'endDate'), observations: optional(form, 'observations') }), 'Alocação registrada.', 'allocation')}>
+        <p className="mt-2 text-sm text-zinc-400">Informe o custo e o preço comercial já na vigência inicial. Os dois históricos são preservados separadamente.</p>
+        <form className="mt-5 grid gap-4 md:grid-cols-3" onSubmit={(event) => submit(event, `/api/employees/${employeeId}/allocations`, (form) => ({ clientId: value(form, 'clientId'), managerUserId: value(form, 'managerUserId'), roleTitle: optional(form, 'roleTitle'), startDate: value(form, 'startDate'), endDate: optional(form, 'endDate'), financialRateCents: Math.round(Number(value(form, 'financialRate')) * 100), commercialRateCents: Math.round(Number(value(form, 'commercialRate')) * 100), observations: optional(form, 'observations') }), 'Alocação e condições iniciais registradas.', 'allocation')}>
           <label className="text-sm font-bold text-zinc-300">Cliente<select className="field mt-2" name="clientId" required><option value="">Selecione</option>{data.options.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
           <label className="text-sm font-bold text-zinc-300">Gestor responsável<select className="field mt-2" name="managerUserId" required><option value="">Selecione</option>{data.options.managers.map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label>
           <label className="text-sm font-bold text-zinc-300">Função<input className="field mt-2" maxLength={160} name="roleTitle" /></label>
           <label className="text-sm font-bold text-zinc-300">Início<input className="field mt-2" name="startDate" required type="date" /></label>
           <label className="text-sm font-bold text-zinc-300">Fim previsto<input className="field mt-2" name="endDate" type="date" /></label>
+          <label className="text-sm font-bold text-zinc-300">Valor/hora pago (R$)<input className="field mt-2" min="0.01" name="financialRate" required step="0.01" type="number" /></label>
+          <label className="text-sm font-bold text-zinc-300">Valor/hora recebido (R$)<input className="field mt-2" min="0.01" name="commercialRate" required step="0.01" type="number" /></label>
           <label className="text-sm font-bold text-zinc-300">Observações<input className="field mt-2" maxLength={2000} name="observations" /></label>
           <button className="button-primary md:col-span-3" disabled={Boolean(busy)}>{busy === 'allocation' ? 'Registrando…' : 'Registrar alocação'}</button>
         </form>
@@ -133,6 +123,7 @@ export function WorkforcePanel({ employeeId, data, contractDocuments }: {
       <History title="Alocações e condições comerciais" empty="Nenhuma alocação registrada.">
         {data.allocations.map((allocation) => <div className="border-t border-white/10 py-5 first:border-0" key={allocation.id}>
           <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold text-white">{allocation.clientName}{allocation.roleTitle ? ` · ${allocation.roleTitle}` : ''}</p><p className="mt-1 text-sm text-zinc-400">Gestor: {allocation.managerName} · {date(allocation.startDate)} → {allocation.endDate ? date(allocation.endDate) : 'em aberto'}</p></div><Status status={allocation.status} /></div>
+          {allocation.status === 'active' && <form className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={(event) => submit(event, `/api/allocations/${allocation.id}/commercial-conditions`, (form) => ({ hourlyRateCents: Math.round(Number(value(form, 'hourlyRate')) * 100), effectiveFrom: value(form, 'effectiveFrom'), observations: optional(form, 'observations') }), 'Nova condição comercial vigente.', `commercial-${allocation.id}`)}><label className="text-sm font-bold text-zinc-300">Valor/hora recebido (R$)<input className="field mt-2" min="0.01" name="hourlyRate" required step="0.01" type="number" /></label><label className="text-sm font-bold text-zinc-300">Início da vigência<input className="field mt-2" min={allocation.startDate} name="effectiveFrom" required type="date" /></label><label className="text-sm font-bold text-zinc-300">Observações<input className="field mt-2" name="observations" /></label><button className="button-secondary self-end" disabled={Boolean(busy)}>{busy === `commercial-${allocation.id}` ? 'Registrando…' : 'Registrar condição comercial'}</button></form>}
           <div className="mt-3 rounded-2xl bg-black/20 px-4">{allocation.commercialConditions.length ? allocation.commercialConditions.map((condition) => <ConditionRow condition={condition} key={condition.id} />) : <p className="py-3 text-sm text-zinc-500">Sem condição comercial.</p>}</div>
         </div>)}
       </History>

@@ -160,17 +160,9 @@ curl -b synova-session.txt -X POST "$APP_URL/portal/api/employees/<EMPLOYEE_ID>/
   -H "Content-Type: application/json" \
   --data '{"contractType":"Prestação de serviços","startDate":"2026-08-01","endDate":null,"documentId":null,"observations":null}'
 
-curl -b synova-session.txt -X POST "$APP_URL/portal/api/employees/<EMPLOYEE_ID>/financial-conditions" \
-  -H "Content-Type: application/json" \
-  --data '{"hourlyRateCents":12500,"effectiveFrom":"2026-08-01","observations":null}'
-
 curl -b synova-session.txt -X POST "$APP_URL/portal/api/employees/<EMPLOYEE_ID>/allocations" \
   -H "Content-Type: application/json" \
-  --data '{"clientId":"<CLIENT_ID>","managerUserId":"<MANAGER_USER_ID>","roleTitle":"Consultor","startDate":"2026-08-01","endDate":null,"observations":null}'
-
-curl -b synova-session.txt -X POST "$APP_URL/portal/api/allocations/<ALLOCATION_ID>/commercial-conditions" \
-  -H "Content-Type: application/json" \
-  --data '{"hourlyRateCents":22000,"effectiveFrom":"2026-08-01","observations":null}'
+  --data '{"clientId":"<CLIENT_ID>","managerUserId":"<MANAGER_USER_ID>","roleTitle":"Consultor","startDate":"2026-08-01","endDate":null,"financialRateCents":12500,"commercialRateCents":22000,"observations":null}'
 
 curl -b synova-session.txt -X POST "$APP_URL/portal/api/contracts/<CONTRACT_ID>/end" \
   -H "Content-Type: application/json" --data '{"endDate":"2026-12-31"}'
@@ -179,7 +171,7 @@ curl -b synova-session.txt -X POST "$APP_URL/portal/api/allocations/<ALLOCATION_
   -H "Content-Type: application/json" --data '{"endDate":"2026-12-31"}'
 ```
 
-Cada nova condição cria uma vigência; ela não sobrescreve valores históricos.
+Ao iniciar uma alocação, informe os valores financeiro e comercial juntos: a operação é atômica e cria as duas condições com a mesma vigência inicial. Cada nova condição cria uma vigência; ela não sobrescreve valores históricos.
 
 ## Competências e apontamentos via CLI
 

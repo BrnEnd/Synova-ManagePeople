@@ -94,9 +94,7 @@ try {
 
   const clientResult = await manager.json('/api/clients', 'POST', { name: 'Cliente E2E', legalName: 'Cliente E2E Ltda', taxId: null, contactName: null, email: null, phone: null, address: null, observations: null });
   await manager.json(`/api/employees/${employeeId}/contracts`, 'POST', { contractType: 'Prestação de serviços', startDate: `${month}-01`, endDate: null, documentId: null, observations: null });
-  await manager.json(`/api/employees/${employeeId}/financial-conditions`, 'POST', { hourlyRateCents: 10_000, effectiveFrom: `${month}-01`, observations: null });
-  const allocationResult = await manager.json(`/api/employees/${employeeId}/allocations`, 'POST', { clientId: clientResult.body.client.id, managerUserId: managerResult.user.id, roleTitle: 'Consultora', startDate: `${month}-01`, endDate: null, observations: null });
-  await manager.json(`/api/allocations/${allocationResult.body.allocation.id}/commercial-conditions`, 'POST', { hourlyRateCents: 20_000, effectiveFrom: `${month}-01`, observations: null });
+  await manager.json(`/api/employees/${employeeId}/allocations`, 'POST', { clientId: clientResult.body.client.id, managerUserId: managerResult.user.id, roleTitle: 'Consultora', startDate: `${month}-01`, endDate: null, financialRateCents: 10_000, commercialRateCents: 20_000, observations: null });
 
   const employee = new BrowserSession();
   await loginAndChange(employee, employeeEmail, temporaryPassword, employeePassword);

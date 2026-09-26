@@ -11,8 +11,13 @@ export const contractSchema = z.object({
 export const allocationSchema = z.object({
   clientId: z.uuid(), managerUserId: z.uuid(), roleTitle: optionalText(160), startDate: z.iso.date(),
   endDate: z.union([z.iso.date(), z.literal(''), z.null()]).optional().transform((value) => value || null),
+  financialRateCents: z.number().int().positive().max(100_000_000).optional(),
+  commercialRateCents: z.number().int().positive().max(100_000_000).optional(),
   observations: optionalText(2000),
-}).strict();
+}).strict().refine(
+  (value) => (value.financialRateCents === undefined) === (value.commercialRateCents === undefined),
+  { message: 'Informe o valor-hora pago e o valor-hora recebido juntos.' },
+);
 export const rateConditionSchema = z.object({
   hourlyRateCents: z.number().int().positive().max(100_000_000), effectiveFrom: z.iso.date(), observations: optionalText(2000),
 }).strict();
