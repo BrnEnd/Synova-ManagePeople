@@ -17,6 +17,11 @@ export type WorkforcePanelData = {
 
 const money = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const date = (value: string) => new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`));
+const nextDay = (value: string) => {
+  const result = new Date(`${value}T00:00:00Z`);
+  result.setUTCDate(result.getUTCDate() + 1);
+  return result.toISOString().slice(0, 10);
+};
 const value = (form: FormData, key: string) => String(form.get(key) || '').trim();
 const optional = (form: FormData, key: string) => value(form, key) || null;
 const optionalUpdate = (form: FormData, key: string) => value(form, key) || undefined;
@@ -29,6 +34,8 @@ export function WorkforcePanel({ employeeId, data, contractDocuments }: {
   const [busy, setBusy] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [updateMode, setUpdateMode] = useState<'replace' | 'stage' | 'end'>('stage');
+  const currentAllocation = data.current ? data.allocations.find((allocation) => allocation.id === data.current?.allocationId) : undefined;
+  const missingInitialCommercialCondition = Boolean(data.current?.commercialRateCents === null && currentAllocation && currentAllocation.commercialConditions.length === 0);
 
   async function submit(event: FormEvent<HTMLFormElement>, endpoint: string, payload: (form: FormData) => object, success: string, key: string) {
     event.preventDefault(); setBusy(key); setFeedback(null);
@@ -62,11 +69,21 @@ export function WorkforcePanel({ employeeId, data, contractDocuments }: {
             <Metric label="Valor/hora pago" value={data.current.financialRateCents === null ? 'Não informado' : money.format(data.current.financialRateCents / 100)} />
             <Metric label="Valor/hora recebido" value={data.current.commercialRateCents === null ? 'Não informado' : money.format(data.current.commercialRateCents / 100)} />
           </div>
+          {missingInitialCommercialCondition && <div className="mt-6 rounded-2xl border border-amber-300/20 bg-amber-300/5 p-4 sm:p-5">
+            <h3 className="font-black text-white">Completar condição comercial</h3>
+            <p className="mt-1 text-sm text-zinc-400">Esta alocação foi criada sem o valor recebido. Informe-o na vigência inicial sem criar uma nova etapa.</p>
+            <form className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]" onSubmit={(event) => submit(event, `/api/allocations/${data.current!.allocationId}/commercial-conditions`, (form) => ({ hourlyRateCents: Math.round(Number(value(form, 'hourlyRate')) * 100), effectiveFrom: value(form, 'effectiveFrom'), observations: optional(form, 'observations') }), 'Condição comercial atual registrada.', 'complete-commercial')}>
+              <label className="text-sm font-bold text-zinc-300">Valor/hora recebido (R$)<input className="field mt-2" min="0.01" name="hourlyRate" required step="0.01" type="number" /></label>
+              <label className="text-sm font-bold text-zinc-300">Início da vigência<input className="field mt-2" name="effectiveFrom" readOnly type="date" value={currentAllocation!.startDate} /></label>
+              <label className="text-sm font-bold text-zinc-300">Observações<input className="field mt-2" name="observations" /></label>
+              <button className="button-primary self-end" disabled={Boolean(busy)}>{busy === 'complete-commercial' ? 'Registrando…' : 'Registrar condição comercial atual'}</button>
+            </form>
+          </div>}
           <form className="mt-6 grid gap-4 border-t border-white/10 pt-6 md:grid-cols-3" onSubmit={(event) => submit(event, `/api/allocations/${data.current!.allocationId}/update`, (form) => ({ employeeId, mode: updateMode, effectiveDate: value(form, 'effectiveDate'), currentEndDate: updateMode === 'replace' ? value(form, 'currentEndDate') : undefined, clientId: optionalUpdate(form, 'clientId'), managerUserId: optionalUpdate(form, 'managerUserId'), roleTitle: optionalUpdate(form, 'roleTitle'), endDate: updateMode === 'end' ? undefined : optionalUpdate(form, 'endDate'), contractType: updateMode === 'end' ? undefined : optionalUpdate(form, 'contractType'), financialRateCents: updateMode === 'end' ? undefined : optionalCents(form, 'financialRate'), commercialRateCents: updateMode === 'end' ? undefined : optionalCents(form, 'commercialRate'), observations: optionalUpdate(form, 'observations') }), 'Alocação atualizada e histórico preservado.', 'update-allocation')}>
             <label className="text-sm font-bold text-zinc-300 md:col-span-3">Atualizar alocação<select className="field mt-2" name="mode" value={updateMode} onChange={(event) => setUpdateMode(event.target.value as typeof updateMode)}><option value="stage">Criar nova etapa na alocação atual</option><option value="replace">Encerrar alocação atual e iniciar nova</option><option value="end">Apenas encerrar alocação atual</option></select></label>
-            <label className="text-sm font-bold text-zinc-300">{updateMode === 'end' ? 'Data de encerramento' : 'Início da nova vigência'}<input className="field mt-2" min={data.current.startDate} name="effectiveDate" required type="date" /></label>
+            <label className="text-sm font-bold text-zinc-300">{updateMode === 'end' ? 'Data de encerramento' : 'Início da nova vigência'}<input className="field mt-2" min={updateMode === 'end' ? data.current.startDate : nextDay(data.current.startDate)} name="effectiveDate" required type="date" /></label>
             {updateMode === 'replace' && <><label className="text-sm font-bold text-zinc-300">Término da alocação atual<input className="field mt-2" min={data.current.startDate} name="currentEndDate" required type="date" /></label><label className="text-sm font-bold text-zinc-300">Cliente<select className="field mt-2" name="clientId" required><option value="">Selecione</option>{data.options.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label><label className="text-sm font-bold text-zinc-300">Gestor responsável<select className="field mt-2" name="managerUserId" required><option value="">Selecione</option>{data.options.managers.map((manager) => <option key={manager.id} value={manager.id}>{manager.name}</option>)}</select></label></>}
-            {updateMode === 'stage' && <p className="text-sm text-zinc-400 md:col-span-2">Preencha somente os dados que mudam nesta vigência.</p>}
+            {updateMode === 'stage' && <p className="text-sm text-zinc-400 md:col-span-2">Preencha somente os dados que mudam nesta nova vigência. A data deve ser posterior à etapa atual.</p>}
             {updateMode !== 'end' && <><label className="text-sm font-bold text-zinc-300">Tipo de contrato<input className="field mt-2" name="contractType" required={updateMode === 'replace'} /></label><label className="text-sm font-bold text-zinc-300">Valor/hora pago (R$)<input className="field mt-2" min="0.01" name="financialRate" required={updateMode === 'replace'} step="0.01" type="number" /></label><label className="text-sm font-bold text-zinc-300">Valor/hora recebido (R$)<input className="field mt-2" min="0.01" name="commercialRate" required={updateMode === 'replace'} step="0.01" type="number" /></label><label className="text-sm font-bold text-zinc-300">Término previsto<input className="field mt-2" name="endDate" type="date" /></label><label className="text-sm font-bold text-zinc-300">Função<input className="field mt-2" name="roleTitle" /></label></>}
             <label className="text-sm font-bold text-zinc-300">Observações<input className="field mt-2" name="observations" /></label>
             <button className="button-primary md:col-span-3" disabled={Boolean(busy)}>{busy === 'update-allocation' ? 'Atualizando…' : 'Confirmar atualização'}</button>

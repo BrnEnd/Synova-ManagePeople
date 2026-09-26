@@ -55,4 +55,32 @@ describe('WorkforcePanel', () => {
       }),
     })));
   });
+
+  it('completa a condição comercial ausente sem criar uma nova etapa', async () => {
+    const user = userEvent.setup();
+    render(<WorkforcePanel employeeId="employee-a" data={{
+      ...data,
+      allocations: [{
+        id: 'allocation-a', clientName: 'Cliente A', managerName: 'Gestora A', roleTitle: 'Consultora',
+        startDate: '2026-09-28', endDate: '2027-09-30', status: 'active', observations: null, commercialConditions: [],
+      }],
+      current: {
+        allocationId: 'allocation-a', clientName: 'Cliente A', managerName: 'Gestora A', startDate: '2026-09-28', endDate: '2027-09-30',
+        contractType: 'PJ', financialRateCents: 7_500, commercialRateCents: null, approvedMinutes: 0, totalPaidCents: 0, totalReceivedCents: null,
+      },
+    }} contractDocuments={[]} />);
+
+    const completion = screen.getByRole('heading', { name: 'Completar condição comercial' }).closest('div')!;
+    const form = within(completion);
+    expect(form.getByLabelText('Início da vigência')).toHaveProperty('value', '2026-09-28');
+    expect(form.getByLabelText('Início da vigência')).toHaveProperty('readOnly', true);
+
+    await user.type(form.getByLabelText('Valor/hora recebido (R$)'), '83.79');
+    await user.click(form.getByRole('button', { name: 'Registrar condição comercial atual' }));
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/portal/api/allocations/allocation-a/commercial-conditions', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ hourlyRateCents: 8_379, effectiveFrom: '2026-09-28', observations: null }),
+    })));
+  });
 });
