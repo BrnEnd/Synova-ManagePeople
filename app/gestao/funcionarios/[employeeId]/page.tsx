@@ -29,6 +29,7 @@ export default async function EmployeeDetailPage({
       <ManagementHeader active="employees" displayName={identity.displayName} tenantSlug={identity.tenantSlug} />
       <EmployeeDetail
         blobEnabled={isBlobStorageConfigured()}
+        defaultTemporaryPassword={process.env.EMPLOYEE_DEFAULT_TEMPORARY_PASSWORD ?? ''}
         detail={{
           employee: { ...detail.employee, createdAt: detail.employee.createdAt.toISOString() },
           notes: detail.notes.map((note) => ({ ...note, createdAt: note.createdAt.toISOString() })),

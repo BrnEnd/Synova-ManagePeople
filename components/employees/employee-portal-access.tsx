@@ -17,7 +17,7 @@ const unavailableMessages = {
   missing_email: 'Cadastre o e-mail pessoal para definir o Usuário.',
 } as const;
 
-export function EmployeePortalAccess({ employee }: { employee: PortalAccessEmployee }) {
+export function EmployeePortalAccess({ employee, defaultTemporaryPassword }: { employee: PortalAccessEmployee; defaultTemporaryPassword: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -25,6 +25,7 @@ export function EmployeePortalAccess({ employee }: { employee: PortalAccessEmplo
   const [error, setError] = useState('');
   const [accessProvisioned, setAccessProvisioned] = useState(false);
   const availability = accessProvisioned ? 'created' : employeeAccessAvailability(employee);
+  const passwordConfigured = defaultTemporaryPassword.length > 0;
 
   async function createPortalAccess(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,7 +58,7 @@ export function EmployeePortalAccess({ employee }: { employee: PortalAccessEmplo
 
       setAccessProvisioned(true);
       if (body.notificationStatus === 'failed') {
-        setWarning('O acesso foi criado, mas o e-mail interno não foi enviado. Preserve a senha exibida para tratamento manual; ela não poderá ser recuperada depois que você sair desta tela.');
+        setWarning('O acesso foi criado, mas o e-mail interno não foi enviado. Use a senha temporária padrão configurada para o portal no tratamento manual.');
       } else {
         formElement.reset();
         setMessage(body.notificationStatus === 'skipped'
@@ -96,13 +97,13 @@ export function EmployeePortalAccess({ employee }: { employee: PortalAccessEmplo
             <input className="field mt-2 text-zinc-400" readOnly value={employee.personalEmail!} />
           </label>
           <label className="block text-sm font-bold text-zinc-300">Senha temporária
-            <input aria-describedby="temporary-password-help" autoComplete="new-password" className="field mt-2" disabled={accessProvisioned} minLength={12} name="temporaryPassword" required type="password" />
+            <input aria-describedby="temporary-password-help" autoComplete="new-password" className="field mt-2" disabled={accessProvisioned} minLength={12} name="temporaryPassword" readOnly required type="password" value={defaultTemporaryPassword} />
           </label>
           <label className="block text-sm font-bold text-zinc-300">Confirmar senha
-            <input autoComplete="new-password" className="field mt-2" disabled={accessProvisioned} minLength={12} name="passwordConfirmation" required type="password" />
+            <input autoComplete="new-password" className="field mt-2" disabled={accessProvisioned} minLength={12} name="passwordConfirmation" readOnly required type="password" value={defaultTemporaryPassword} />
           </label>
-          <p className="text-xs leading-5 text-zinc-500" id="temporary-password-help">Use ao menos 12 caracteres, com maiúscula, minúscula, número e símbolo. A troca será obrigatória no primeiro acesso.</p>
-          <button className="pressable synova-gradient w-full rounded-full px-5 py-3 font-black text-white disabled:cursor-wait disabled:opacity-60" disabled={busy || accessProvisioned} type="submit">
+          <p className={`text-xs leading-5 ${passwordConfigured ? 'text-zinc-500' : 'text-red-300'}`} id="temporary-password-help">{passwordConfigured ? 'A senha temporária padrão já está preenchida. A troca será obrigatória no primeiro acesso.' : 'A senha temporária padrão ainda não foi configurada no ambiente.'}</p>
+          <button className="pressable synova-gradient w-full rounded-full px-5 py-3 font-black text-white disabled:cursor-wait disabled:opacity-60" disabled={busy || accessProvisioned || !passwordConfigured} type="submit">
             {busy ? 'Criando acesso…' : accessProvisioned ? 'Acesso criado' : 'Criar acesso ao portal'}
           </button>
         </form>

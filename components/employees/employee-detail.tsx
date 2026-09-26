@@ -90,7 +90,7 @@ function safeName(value: string) {
     .replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(-180) || 'documento';
 }
 
-export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetailData; blobEnabled: boolean }) {
+export function EmployeeDetail({ detail, blobEnabled, defaultTemporaryPassword }: { detail: EmployeeDetailData; blobEnabled: boolean; defaultTemporaryPassword: string }) {
   const { employee } = detail;
   const router = useRouter();
   const [busy, setBusy] = useState<'profile' | 'document' | 'note' | null>(null);
@@ -291,7 +291,7 @@ export function EmployeeDetail({ detail, blobEnabled }: { detail: EmployeeDetail
         </div>
 
         <aside className="space-y-6">
-          <EmployeePortalAccess employee={employee} />
+          <EmployeePortalAccess employee={employee} defaultTemporaryPassword={defaultTemporaryPassword} />
           <section className="rounded-3xl border border-white/10 bg-zinc-900/80 p-5 sm:p-6">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-400">Onboarding</p><h2 className="mt-2 text-xl font-black text-white">Pendências</h2>
             {employee.missingFields.length === 0 ? <p className="mt-4 text-sm leading-6 text-emerald-300">Todos os dados básicos e o documento de identificação foram recebidos.</p> : <ul className="mt-4 space-y-2">{employee.missingFields.map((field) => <li className="flex gap-2 text-sm text-zinc-400" key={field}><span className="text-amber-400" aria-hidden="true">•</span>{pendingLabels[field] || field}</li>)}</ul>}

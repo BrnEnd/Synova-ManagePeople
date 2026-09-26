@@ -28,6 +28,7 @@ Nunca configure `DATABASE_URL_UNPOOLED`, `POSTGRES_URL` ou outra credencial prop
 - `SESSION_SECRET`
 - `PROVISIONING_SECRET`
 - `PROVISIONING_IDEMPOTENCY_SECRET`
+- `EMPLOYEE_DEFAULT_TEMPORARY_PASSWORD`, senha forte preenchida automaticamente na criação do primeiro acesso e obrigatoriamente alterada pelo Funcionário
 - `CRON_SECRET`
 - `BLOB_READ_WRITE_TOKEN` ou OIDC com `BLOB_STORE_ID`
 - `CANONICAL_PORTAL_URL=https://www.synovadigital.com.br/portal`
