@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import type { StoredPassword } from '@/lib/identity/password';
-import { employeeAccessAvailability } from '@/lib/employee-access/policy';
+import { employeeAccessAvailability, type EmployeeOperationalReadiness } from '@/lib/employee-access/policy';
 
 export type AccessEmployee = {
   id: string;
@@ -10,6 +10,9 @@ export type AccessEmployee = {
   personalEmail: string | null;
   status: 'pre_registration' | 'active' | 'inactive';
   onboardingPending: boolean;
+  documentationMode: 'legacy' | 'self_service';
+  documentationStatus: string;
+  operationalReadiness?: EmployeeOperationalReadiness;
 };
 
 export type AccessUser = {
@@ -74,8 +77,23 @@ export function assertEmployeeAccessAvailable(employee: AccessEmployee, options?
   if (availability === 'onboarding_pending') {
     throw new EmployeeAccessIneligibleError('Conclua o onboarding antes de criar o acesso ao portal.');
   }
+  if (availability === 'documentation_pending') {
+    throw new EmployeeAccessIneligibleError('A documentação precisa ser aprovada antes de criar o acesso ao portal.');
+  }
   if (availability === 'missing_email') {
     throw new EmployeeAccessIneligibleError('Cadastre o e-mail pessoal antes de criar o acesso ao portal.');
+  }
+  if (availability === 'contract_pending') {
+    throw new EmployeeAccessIneligibleError('Cadastre um Contrato ativo antes de criar o acesso ao portal.');
+  }
+  if (availability === 'allocation_pending') {
+    throw new EmployeeAccessIneligibleError('Cadastre uma Alocação ativa antes de criar o acesso ao portal.');
+  }
+  if (availability === 'financial_condition_pending') {
+    throw new EmployeeAccessIneligibleError('Cadastre a condição financeira vigente antes de criar o acesso ao portal.');
+  }
+  if (availability === 'commercial_condition_pending') {
+    throw new EmployeeAccessIneligibleError('Cadastre a condição comercial vigente antes de criar o acesso ao portal.');
   }
 }
 

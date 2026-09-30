@@ -1,7 +1,7 @@
 import 'server-only';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
-import { get, head, put } from '@vercel/blob';
+import { del, get, head, put } from '@vercel/blob';
 
 const localRoot = resolve(process.cwd(), '.data', 'uploads');
 
@@ -50,4 +50,16 @@ export async function readDocument(pathname: string) {
   const result = await get(pathname, { access: 'private' });
   if (!result || result.statusCode !== 200) return null;
   return { body: result.stream, headers: result.headers };
+}
+
+export async function deleteDocumentStorage(pathname: string) {
+  if (isBlobStorageConfigured()) {
+    await del(pathname);
+    return;
+  }
+  try {
+    await unlink(localPath(pathname));
+  } catch (error) {
+    if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')) throw error;
+  }
 }

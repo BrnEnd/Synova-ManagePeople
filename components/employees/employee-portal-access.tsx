@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
-import { employeeAccessAvailability, type EmployeeAccessCandidate } from '@/lib/employee-access/policy';
+import { employeeAccessBlockers, type EmployeeAccessAvailability, type EmployeeAccessCandidate } from '@/lib/employee-access/policy';
 import { portalPath } from '@/lib/routing/base-path';
 
 type PortalAccessEmployee = EmployeeAccessCandidate & {
@@ -14,7 +14,12 @@ const unavailableMessages = {
   created: 'Este Funcionário já possui um Usuário associado.',
   inactive: 'Ative o Funcionário antes de criar o acesso.',
   onboarding_pending: 'Conclua as pendências de onboarding para liberar a criação do acesso.',
+  documentation_pending: 'A documentação enviada pelo funcionário precisa ser aprovada para liberar o acesso.',
   missing_email: 'Cadastre o e-mail pessoal para definir o Usuário.',
+  contract_pending: 'Cadastre um Contrato ativo para o funcionário.',
+  allocation_pending: 'Cadastre uma Alocação ativa para o funcionário.',
+  financial_condition_pending: 'Cadastre a condição financeira vigente.',
+  commercial_condition_pending: 'Cadastre a condição comercial vigente na Alocação.',
 } as const;
 
 export function EmployeePortalAccess({ employee, defaultTemporaryPassword }: { employee: PortalAccessEmployee; defaultTemporaryPassword: string }) {
@@ -24,7 +29,9 @@ export function EmployeePortalAccess({ employee, defaultTemporaryPassword }: { e
   const [warning, setWarning] = useState('');
   const [error, setError] = useState('');
   const [accessProvisioned, setAccessProvisioned] = useState(false);
-  const availability = accessProvisioned ? 'created' : employeeAccessAvailability(employee);
+  const blockers: Exclude<EmployeeAccessAvailability, 'available'>[] = accessProvisioned ? ['created'] : employeeAccessBlockers(employee);
+  const blocked = blockers.length > 0;
+  const availability: EmployeeAccessAvailability = blocked ? blockers[0]! : 'available';
   const passwordConfigured = defaultTemporaryPassword.length > 0;
 
   async function createPortalAccess(event: FormEvent<HTMLFormElement>) {
@@ -89,8 +96,8 @@ export function EmployeePortalAccess({ employee, defaultTemporaryPassword }: { e
         {error && <p className="mt-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300" role="alert">{error}</p>}
       </div>
 
-      {availability !== 'available' && !warning ? (
-        !message && !warning && <p className="mt-4 text-sm leading-6 text-zinc-400">{unavailableMessages[availability]}</p>
+      {blocked && !warning ? (
+        !message && !warning && <ul className="mt-4 space-y-2 text-sm leading-6 text-zinc-400">{blockers.map((blocker) => <li key={blocker}>{unavailableMessages[blocker]}</li>)}</ul>
       ) : (
         <form className="mt-5 space-y-4" onSubmit={createPortalAccess}>
           <label className="block text-sm font-bold text-zinc-300">Usuário

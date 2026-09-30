@@ -11,6 +11,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh }) }));
 const employee = {
   id: 'employee-a', fullName: 'Bruna Soares', personalEmail: 'bruna@example.com', userId: null,
   status: 'active' as const, onboardingPending: false,
+  documentationMode: 'legacy' as const, documentationStatus: 'legacy',
 };
 
 describe('EmployeePortalAccess', () => {
@@ -43,5 +44,23 @@ describe('EmployeePortalAccess', () => {
       method: 'POST',
       body: JSON.stringify({ temporaryPassword: defaultTemporaryPassword, passwordConfirmation: defaultTemporaryPassword }),
     })));
+  });
+
+  it('lista todas as pendências operacionais antes de permitir o acesso', () => {
+    render(<EmployeePortalAccess employee={{
+      ...employee,
+      operationalReadiness: {
+        hasActiveContract: false,
+        hasActiveAllocation: false,
+        hasFinancialCondition: false,
+        hasCommercialCondition: false,
+      },
+    }} defaultTemporaryPassword="Synova#2026!Inicial" />);
+
+    expect(screen.getByText('Cadastre um Contrato ativo para o funcionário.')).not.toBeNull();
+    expect(screen.getByText('Cadastre uma Alocação ativa para o funcionário.')).not.toBeNull();
+    expect(screen.getByText('Cadastre a condição financeira vigente.')).not.toBeNull();
+    expect(screen.getByText('Cadastre a condição comercial vigente na Alocação.')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Criar acesso ao portal' })).toBeNull();
   });
 });

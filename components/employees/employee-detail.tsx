@@ -6,7 +6,11 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { EmployeePortalAccess } from '@/components/employees/employee-portal-access';
 import { DocumentGrid } from '@/components/employees/document-grid';
+import { ManagerDocumentationCard } from '@/components/document-onboarding/manager-documentation-card';
+import type { ManagerOnboardingDetail } from '@/lib/document-onboarding/service';
 import { portalPath } from '@/lib/routing/base-path';
+import type { DocumentType } from '@/lib/documents/module';
+import type { AccessEmployee } from '@/lib/employee-access/module';
 
 type EmployeeDetailData = {
   employee: {
@@ -31,6 +35,10 @@ type EmployeeDetailData = {
     entryDate: string | null;
     professionalTitle: string | null;
     employmentType: string;
+    gender: 'male' | 'female' | null;
+    raceColor: string | null;
+    documentationMode: 'legacy' | 'self_service';
+    documentationStatus: string;
     status: 'pre_registration' | 'active' | 'inactive';
     onboardingPending: boolean;
     missingFields: string[];
@@ -39,7 +47,7 @@ type EmployeeDetailData = {
   };
   documents: Array<{
     id: string;
-    type: 'identification' | 'address_proof' | 'contract' | 'payment_forecast' | 'invoice' | 'payment_receipt' | 'other';
+    type: DocumentType;
     originalName: string;
     mimeType: string;
     size: number;
@@ -90,7 +98,7 @@ function safeName(value: string) {
     .replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').slice(-180) || 'documento';
 }
 
-export function EmployeeDetail({ detail, blobEnabled, defaultTemporaryPassword }: { detail: EmployeeDetailData; blobEnabled: boolean; defaultTemporaryPassword: string }) {
+export function EmployeeDetail({ detail, blobEnabled, defaultTemporaryPassword, documentation, portalAccessCandidate }: { detail: EmployeeDetailData; blobEnabled: boolean; defaultTemporaryPassword: string; documentation: ManagerOnboardingDetail | null; portalAccessCandidate: AccessEmployee | null }) {
   const { employee } = detail;
   const router = useRouter();
   const [busy, setBusy] = useState<'profile' | 'document' | 'note' | null>(null);
@@ -240,6 +248,7 @@ export function EmployeeDetail({ detail, blobEnabled, defaultTemporaryPassword }
 
       <div className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <div className="space-y-6">
+          <ManagerDocumentationCard detail={documentation} employeeId={employee.id} employmentType={employee.employmentType} personalEmail={employee.personalEmail} status={employee.status} userId={employee.userId} />
           <form className="rounded-3xl border border-white/10 bg-zinc-900/70 p-5 sm:p-7" onSubmit={saveProfile}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-500">Perfil</p><h2 className="mt-2 text-xl font-black text-white">Dados do funcionário</h2></div>
@@ -255,7 +264,7 @@ export function EmployeeDetail({ detail, blobEnabled, defaultTemporaryPassword }
               <label className="block text-sm font-bold text-zinc-300">E-mail corporativo<input className="field mt-2" defaultValue={employee.corporateEmail || ''} maxLength={320} name="corporateEmail" type="email" /></label>
               <label className="block text-sm font-bold text-zinc-300">Cargo ou função<input className="field mt-2" defaultValue={employee.professionalTitle || ''} maxLength={160} name="professionalTitle" /></label>
               <label className="block text-sm font-bold text-zinc-300">Data de entrada<input className="field mt-2" defaultValue={employee.entryDate || ''} name="entryDate" type="date" /></label>
-              <label className="block text-sm font-bold text-zinc-300">Tipo de vínculo<select className="field mt-2" defaultValue={employee.employmentType} name="employmentType"><option value="pj">PJ</option></select></label>
+              <label className="block text-sm font-bold text-zinc-300">Tipo de vínculo<select className="field mt-2" defaultValue={employee.employmentType} name="employmentType"><option value="clt">CLT</option><option value="pj">PJ</option></select></label>
             </div>
             <div className="mt-8 border-t border-white/10 pt-6"><h3 className="font-black text-white">Endereço</h3>
               <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -291,7 +300,7 @@ export function EmployeeDetail({ detail, blobEnabled, defaultTemporaryPassword }
         </div>
 
         <aside className="space-y-6">
-          <EmployeePortalAccess employee={employee} defaultTemporaryPassword={defaultTemporaryPassword} />
+          <EmployeePortalAccess employee={portalAccessCandidate ?? employee} defaultTemporaryPassword={defaultTemporaryPassword} />
           <section className="rounded-3xl border border-white/10 bg-zinc-900/80 p-5 sm:p-6">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-400">Onboarding</p><h2 className="mt-2 text-xl font-black text-white">Pendências</h2>
             {employee.missingFields.length === 0 ? <p className="mt-4 text-sm leading-6 text-emerald-300">Todos os dados básicos e o documento de identificação foram recebidos.</p> : <ul className="mt-4 space-y-2">{employee.missingFields.map((field) => <li className="flex gap-2 text-sm text-zinc-400" key={field}><span className="text-amber-400" aria-hidden="true">•</span>{pendingLabels[field] || field}</li>)}</ul>}

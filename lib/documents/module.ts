@@ -9,6 +9,15 @@ export const ALLOWED_DOCUMENT_MIME_TYPES = [
 export type DocumentType =
   | 'identification'
   | 'address_proof'
+  | 'voter_registration'
+  | 'dependent_certificate'
+  | 'military_certificate'
+  | 'marriage_certificate'
+  | 'medical_admission'
+  | 'work_card'
+  | 'photo'
+  | 'pis_proof'
+  | 'cnpj_card'
   | 'contract'
   | 'payment_forecast'
   | 'invoice'
@@ -36,6 +45,7 @@ export type DocumentRepository = {
   createIdempotently(document: EmployeeDocument): Promise<{ document: EmployeeDocument; replayed: boolean }>;
   listForEmployee(tenantId: string, employeeId: string): Promise<EmployeeDocument[]>;
   get(tenantId: string, documentId: string): Promise<EmployeeDocument | null>;
+  recordAccess(tenantId: string, document: EmployeeDocument, actorUserId: string, disposition: 'preview' | 'download', at: Date): Promise<void>;
 };
 
 type Dependencies = {
@@ -107,6 +117,10 @@ export function createDocumentsModule(dependencies: Dependencies) {
 
     get(tenantId: string, documentId: string) {
       return dependencies.repository.get(tenantId, documentId);
+    },
+
+    recordAccess(tenantId: string, document: EmployeeDocument, actorUserId: string, disposition: 'preview' | 'download') {
+      return dependencies.repository.recordAccess(tenantId, document, actorUserId, disposition, dependencies.now());
     },
   };
 }

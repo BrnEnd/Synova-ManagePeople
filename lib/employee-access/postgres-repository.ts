@@ -1,8 +1,20 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
-import { auditEvents, employees, idempotencyRecords, users } from '@/lib/db/schema';
+import {
+  allocations,
+  auditEvents,
+  commercialConditions,
+  contracts,
+  employees,
+  financialConditions,
+  idempotencyRecords,
+  users,
+} from '@/lib/db/schema';
 import { withTenantTransaction } from '@/lib/db/transactions';
+import type { DatabaseTransaction } from '@/lib/db/transactions';
+import type { EmployeeOperationalReadiness } from '@/lib/employee-access/policy';
+import { isEmployeeDocumentationMode } from '@/lib/document-onboarding/types';
 import {
   EmployeeAccessConflictError,
   EmployeeAccessNotFoundError,
@@ -14,7 +26,8 @@ import {
 
 const ACCESS_SCOPE = 'employee:portal-access:create';
 
-function mapEmployee(row: typeof employees.$inferSelect): AccessEmployee {
+function mapEmployee(row: typeof employees.$inferSelect, operationalReadiness?: EmployeeOperationalReadiness): AccessEmployee {
+  if (!isEmployeeDocumentationMode(row.documentationMode)) throw new Error('Modo documental do funcionário inválido.');
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -23,7 +36,58 @@ function mapEmployee(row: typeof employees.$inferSelect): AccessEmployee {
     personalEmail: row.email,
     status: row.status,
     onboardingPending: row.onboardingPending,
+    documentationMode: row.documentationMode,
+    documentationStatus: row.documentationStatus,
+    operationalReadiness,
   };
+}
+
+async function operationalReadiness(
+  tx: DatabaseTransaction,
+  tenantId: string,
+  employeeId: string,
+): Promise<EmployeeOperationalReadiness> {
+  const [[contract], [allocation], [financialCondition], [commercialCondition]] = await Promise.all([
+    tx.select({ id: contracts.id }).from(contracts).where(and(
+      eq(contracts.tenantId, tenantId),
+      eq(contracts.employeeId, employeeId),
+      eq(contracts.status, 'active'),
+    )).limit(1),
+    tx.select({ id: allocations.id }).from(allocations).where(and(
+      eq(allocations.tenantId, tenantId),
+      eq(allocations.employeeId, employeeId),
+      eq(allocations.status, 'active'),
+    )).limit(1),
+    tx.select({ id: financialConditions.id }).from(financialConditions).where(and(
+      eq(financialConditions.tenantId, tenantId),
+      eq(financialConditions.employeeId, employeeId),
+      isNull(financialConditions.effectiveTo),
+    )).limit(1),
+    tx.select({ id: commercialConditions.id }).from(commercialConditions).innerJoin(allocations, and(
+      eq(allocations.tenantId, commercialConditions.tenantId),
+      eq(allocations.id, commercialConditions.allocationId),
+    )).where(and(
+      eq(commercialConditions.tenantId, tenantId),
+      eq(allocations.employeeId, employeeId),
+      eq(allocations.status, 'active'),
+      isNull(commercialConditions.effectiveTo),
+    )).limit(1),
+  ]);
+  return {
+    hasActiveContract: Boolean(contract),
+    hasActiveAllocation: Boolean(allocation),
+    hasFinancialCondition: Boolean(financialCondition),
+    hasCommercialCondition: Boolean(commercialCondition),
+  };
+}
+
+function activeOperationalRelationships(tenantId: string, employeeId: string) {
+  return [
+    sql`exists (select 1 from ${contracts} where ${contracts.tenantId} = ${tenantId} and ${contracts.employeeId} = ${employeeId} and ${contracts.status} = 'active')`,
+    sql`exists (select 1 from ${allocations} where ${allocations.tenantId} = ${tenantId} and ${allocations.employeeId} = ${employeeId} and ${allocations.status} = 'active')`,
+    sql`exists (select 1 from ${financialConditions} where ${financialConditions.tenantId} = ${tenantId} and ${financialConditions.employeeId} = ${employeeId} and ${financialConditions.effectiveTo} is null)`,
+    sql`exists (select 1 from ${commercialConditions} inner join ${allocations} on ${allocations.tenantId} = ${commercialConditions.tenantId} and ${allocations.id} = ${commercialConditions.allocationId} where ${commercialConditions.tenantId} = ${tenantId} and ${allocations.employeeId} = ${employeeId} and ${allocations.status} = 'active' and ${commercialConditions.effectiveTo} is null)`,
+  ];
 }
 
 function mapUser(row: typeof users.$inferSelect): AccessUser {
@@ -52,7 +116,7 @@ export class PostgresEmployeeAccessAccounts implements EmployeeAccessAccounts {
         eq(employees.tenantId, tenantId),
         eq(employees.id, employeeId),
       )).limit(1);
-      return employee ? mapEmployee(employee) : null;
+      return employee ? mapEmployee(employee, await operationalReadiness(tx, tenantId, employeeId)) : null;
     });
   }
 
@@ -87,7 +151,7 @@ export class PostgresEmployeeAccessAccounts implements EmployeeAccessAccounts {
           eq(employees.id, input.employeeId),
         )).limit(1);
         if (!employee) throw new EmployeeAccessNotFoundError();
-        const currentEmployee = mapEmployee(employee);
+        const currentEmployee = mapEmployee(employee, await operationalReadiness(tx, input.tenantId, input.employeeId));
         assertEmployeeAccessAvailable(currentEmployee);
         if (
           currentEmployee.personalEmail!.trim().toLowerCase() !== input.user.email
@@ -111,7 +175,9 @@ export class PostgresEmployeeAccessAccounts implements EmployeeAccessAccounts {
           isNull(employees.userId),
           eq(employees.status, 'active'),
           eq(employees.onboardingPending, false),
+          sql`(${employees.documentationMode} = 'legacy' or ${employees.documentationStatus} = 'approved')`,
           eq(employees.email, currentEmployee.personalEmail!),
+          ...activeOperationalRelationships(input.tenantId, input.employeeId),
         )).returning({ id: employees.id });
         if (!associatedEmployee) {
           throw new EmployeeAccessConflictError('O funcionário deixou de estar disponível para criação de acesso.');

@@ -14,6 +14,17 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import {
+  EMPLOYEE_DOCUMENTATION_MODES,
+  EMPLOYEE_DOCUMENTATION_STATUSES,
+  ONBOARDING_EMPLOYMENT_TYPES,
+  ONBOARDING_ITEM_STATUSES,
+  ONBOARDING_REQUEST_STATUSES,
+} from '@/lib/document-onboarding/types';
+
+function sqlTextValues(values: readonly string[]) {
+  return sql.raw(values.map((value) => `'${value}'`).join(', '));
+}
 
 export const tenantStatus = pgEnum('tenant_status', ['active', 'inactive']);
 export const userRole = pgEnum('user_role', ['manager', 'employee']);
@@ -22,6 +33,15 @@ export const employeeStatus = pgEnum('employee_status', ['pre_registration', 'ac
 export const documentType = pgEnum('document_type', [
   'identification',
   'address_proof',
+  'voter_registration',
+  'dependent_certificate',
+  'military_certificate',
+  'marriage_certificate',
+  'medical_admission',
+  'work_card',
+  'photo',
+  'pis_proof',
+  'cnpj_card',
   'contract',
   'payment_forecast',
   'invoice',
@@ -91,6 +111,10 @@ export const employees = pgTable('employees', {
   entryDate: date('entry_date', { mode: 'string' }),
   professionalTitle: text('professional_title'),
   employmentType: text('employment_type').notNull().default('pj'),
+  gender: text('gender'),
+  raceColor: text('race_color'),
+  documentationMode: text('documentation_mode').notNull().default('legacy'),
+  documentationStatus: text('documentation_status').notNull().default('legacy'),
   status: employeeStatus('status').notNull().default('pre_registration'),
   onboardingPending: boolean('onboarding_pending').notNull().default(true),
   missingFields: jsonb('missing_fields').$type<string[]>().notNull().default([]),
@@ -107,6 +131,8 @@ export const employees = pgTable('employees', {
   }),
   index('employees_tenant_status_idx').on(table.tenantId, table.status),
   index('employees_tenant_name_idx').on(table.tenantId, table.fullName),
+  check('employees_documentation_mode_check', sql`${table.documentationMode} in (${sqlTextValues(EMPLOYEE_DOCUMENTATION_MODES)})`),
+  check('employees_documentation_status_check', sql`${table.documentationStatus} in (${sqlTextValues(EMPLOYEE_DOCUMENTATION_STATUSES)})`),
 ]);
 
 export const documents = pgTable('documents', {
@@ -136,6 +162,104 @@ export const documents = pgTable('documents', {
     foreignColumns: [users.tenantId, users.id],
     name: 'documents_tenant_uploader_fk',
   }),
+]);
+
+export type DocumentOnboardingFormData = {
+  cpf?: string;
+  phone?: string;
+  gender?: 'male' | 'female';
+  raceColor?: 'white' | 'black' | 'brown' | 'yellow' | 'indigenous' | 'prefer_not_to_say';
+  workCardNumber?: string;
+  pisNumber?: string;
+  transportationVoucher?: boolean;
+  tripsPerDay?: number;
+  monthlyAdvance?: boolean;
+  marriageCertificateNotApplicable?: boolean;
+  dependents?: Array<{
+    id: string;
+    name: string;
+    birthDate: string;
+    cpf: string;
+    relationship: string;
+    incomeTax: boolean;
+    familyAllowance: boolean;
+    specialProofRequired?: boolean;
+  }>;
+  truthDeclaration?: boolean;
+};
+
+export const documentOnboardingRequests = pgTable('document_onboarding_requests', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  employeeId: uuid('employee_id').notNull(),
+  employmentType: text('employment_type').notNull(),
+  status: text('status').notNull().default('in_progress'),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true, mode: 'date' }).notNull(),
+  lastSentAt: timestamp('last_sent_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  submittedAt: timestamp('submitted_at', { withTimezone: true, mode: 'date' }),
+  approvedAt: timestamp('approved_at', { withTimezone: true, mode: 'date' }),
+  cancelledAt: timestamp('cancelled_at', { withTimezone: true, mode: 'date' }),
+  purgedAt: timestamp('purged_at', { withTimezone: true, mode: 'date' }),
+  data: jsonb('data').$type<DocumentOnboardingFormData>().notNull().default({}),
+  revision: integer('revision').notNull().default(1),
+  hasUploads: boolean('has_uploads').notNull().default(false),
+  createdByUserId: uuid('created_by_user_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('document_onboarding_requests_tenant_id_unique').on(table.tenantId, table.id),
+  uniqueIndex('document_onboarding_requests_employee_unique').on(table.tenantId, table.employeeId),
+  uniqueIndex('document_onboarding_requests_token_hash_unique').on(table.tokenHash),
+  index('document_onboarding_requests_status_expiry_idx').on(table.tenantId, table.status, table.expiresAt),
+  foreignKey({ columns: [table.tenantId, table.employeeId], foreignColumns: [employees.tenantId, employees.id], name: 'document_onboarding_requests_employee_fk' }),
+  foreignKey({ columns: [table.tenantId, table.createdByUserId], foreignColumns: [users.tenantId, users.id], name: 'document_onboarding_requests_creator_fk' }),
+  check('document_onboarding_requests_employment_type_check', sql`${table.employmentType} in (${sqlTextValues(ONBOARDING_EMPLOYMENT_TYPES)})`),
+  check('document_onboarding_requests_status_check', sql`${table.status} in (${sqlTextValues(ONBOARDING_REQUEST_STATUSES)})`),
+  check('document_onboarding_requests_revision_check', sql`${table.revision} > 0`),
+]);
+
+export const documentOnboardingItems = pgTable('document_onboarding_items', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  requestId: uuid('request_id').notNull(),
+  key: text('key').notNull(),
+  label: text('label').notNull(),
+  required: boolean('required').notNull().default(true),
+  status: text('status').notNull().default('pending'),
+  reviewable: boolean('reviewable').notNull().default(false),
+  rejectionReason: text('rejection_reason'),
+  reviewedByUserId: uuid('reviewed_by_user_id'),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true, mode: 'date' }),
+  position: integer('position').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('document_onboarding_items_tenant_id_unique').on(table.tenantId, table.id),
+  uniqueIndex('document_onboarding_items_request_key_unique').on(table.tenantId, table.requestId, table.key),
+  index('document_onboarding_items_request_position_idx').on(table.tenantId, table.requestId, table.position),
+  foreignKey({ columns: [table.tenantId, table.requestId], foreignColumns: [documentOnboardingRequests.tenantId, documentOnboardingRequests.id], name: 'document_onboarding_items_request_fk' }),
+  foreignKey({ columns: [table.tenantId, table.reviewedByUserId], foreignColumns: [users.tenantId, users.id], name: 'document_onboarding_items_reviewer_fk' }),
+  check('document_onboarding_items_status_check', sql`${table.status} in (${sqlTextValues(ONBOARDING_ITEM_STATUSES)})`),
+]);
+
+export const documentOnboardingFiles = pgTable('document_onboarding_files', {
+  id: uuid('id').primaryKey(),
+  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  requestId: uuid('request_id').notNull(),
+  itemId: uuid('item_id').notNull(),
+  documentId: uuid('document_id').notNull(),
+  version: integer('version').notNull().default(1),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true, mode: 'date' }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('document_onboarding_files_tenant_id_unique').on(table.tenantId, table.id),
+  uniqueIndex('document_onboarding_files_document_unique').on(table.tenantId, table.documentId),
+  index('document_onboarding_files_item_version_idx').on(table.tenantId, table.itemId, table.version),
+  foreignKey({ columns: [table.tenantId, table.requestId], foreignColumns: [documentOnboardingRequests.tenantId, documentOnboardingRequests.id], name: 'document_onboarding_files_request_fk' }),
+  foreignKey({ columns: [table.tenantId, table.itemId], foreignColumns: [documentOnboardingItems.tenantId, documentOnboardingItems.id], name: 'document_onboarding_files_item_fk' }),
+  foreignKey({ columns: [table.tenantId, table.documentId], foreignColumns: [documents.tenantId, documents.id], name: 'document_onboarding_files_document_fk' }),
+  check('document_onboarding_files_version_check', sql`${table.version} > 0`),
 ]);
 
 export const employeeNotes = pgTable('employee_notes', {
@@ -351,6 +475,7 @@ export const notifications = pgTable('notifications', {
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   recipientUserId: uuid('recipient_user_id').notNull(),
   competenceId: uuid('competence_id'),
+  employeeId: uuid('employee_id'),
   type: text('type').notNull(),
   title: text('title').notNull(),
   message: text('message').notNull(),
@@ -362,6 +487,7 @@ export const notifications = pgTable('notifications', {
   index('notifications_tenant_recipient_created_idx').on(table.tenantId, table.recipientUserId, table.createdAt),
   foreignKey({ columns: [table.tenantId, table.recipientUserId], foreignColumns: [users.tenantId, users.id], name: 'notifications_tenant_recipient_fk' }),
   foreignKey({ columns: [table.tenantId, table.competenceId], foreignColumns: [competencies.tenantId, competencies.id], name: 'notifications_tenant_competence_fk' }),
+  foreignKey({ columns: [table.tenantId, table.employeeId], foreignColumns: [employees.tenantId, employees.id], name: 'notifications_tenant_employee_fk' }),
 ]);
 
 export const payments = pgTable('payments', {

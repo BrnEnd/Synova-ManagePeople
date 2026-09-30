@@ -1,0 +1,1 @@
+ALTER TABLE "document_onboarding_items" ADD COLUMN "reviewable" boolean DEFAULT false NOT NULL;

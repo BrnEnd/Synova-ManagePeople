@@ -30,7 +30,13 @@ Quando a role comum não for proprietária das tabelas, conceda a ela `SELECT, I
 
 Documentos aceitam PDF, JPEG, PNG e WebP de até 25 MB. Em desenvolvimento, quando Blob não está configurado, os arquivos ficam em `.data/uploads`, que é ignorado pelo Git. Em produção, configure uma store privada da Vercel por OIDC (`BLOB_STORE_ID`) ou `BLOB_READ_WRITE_TOKEN`.
 
-Com Blob configurado, o navegador envia arquivos diretamente por upload multipart. A aplicação emite o token somente após autenticar o gestor, restringe tipo, tamanho e pathname ao tenant/funcionário e registra os metadados após conferir o objeto armazenado. Downloads sempre passam por uma rota autenticada; o endereço bruto do blob não é exposto na interface.
+Com Blob configurado, o navegador envia arquivos diretamente por upload multipart. Para documentos gerenciais, a aplicação emite o token somente após autenticar o Gestor. No onboarding documental, o link individual do Funcionário atua como credencial bearer limitada à solicitação, Tenant e Funcionário; seu hash é armazenado, ele expira em 15 dias e é invalidado quando renovado ou substituído por uma correção. Em ambos os casos, tipo, tamanho e pathname são conferidos antes do registro idempotente do objeto. Downloads sempre passam por uma rota autenticada; o endereço bruto do blob não é exposto na interface.
+
+## Onboarding documental
+
+Novos funcionários podem permanecer no fluxo documental legado ou receber, por ação manual do gestor, um link individual de admissão com validade de 15 dias. O checklist é definido pelo vínculo CLT/PJ, aceita rascunho e múltiplos arquivos e exige aprovação individual dos documentos. Uma reprovação invalida o link anterior e reabre somente os itens recusados.
+
+O acesso do funcionário ao portal permanece bloqueado até a aprovação documental e a conclusão das demais pendências cadastrais. O cron diário envia lembretes aos gestores, marca links expirados e remove o conteúdo de rascunhos abandonados 90 dias após a expiração. Dados e downloads sensíveis são auditados e nunca devem ser armazenados em cache público.
 
 Verificações disponíveis:
 
@@ -41,7 +47,7 @@ npm run lint
 npm run build
 ```
 
-O smoke integral exige a aplicação em execução e as variáveis de banco/provisionamento carregadas:
+O smoke integral exige a aplicação em execução e as variáveis de banco/provisionamento carregadas. Sua limpeza inclui as tabelas de onboarding documental:
 
 ```bash
 APP_URL=http://localhost:3000 npm run test:e2e

@@ -3,7 +3,9 @@ import { EmployeeDetail } from '@/components/employees/employee-detail';
 import { WorkforcePanel } from '@/components/employees/workforce-panel';
 import { ManagementHeader } from '@/components/management/management-header';
 import { getDocumentsModule } from '@/lib/documents/server';
+import { getDocumentOnboardingService } from '@/lib/document-onboarding/server';
 import { isBlobStorageConfigured } from '@/lib/documents/storage';
+import { PostgresEmployeeAccessAccounts } from '@/lib/employee-access/postgres-repository';
 import { getEmployeesModule } from '@/lib/employees/server';
 import { getCurrentIdentity } from '@/lib/identity/server';
 import { getWorkforceModule } from '@/lib/workforce/server';
@@ -17,12 +19,15 @@ export default async function EmployeeDetailPage({
   if (identity.role !== 'manager') redirect('/funcionario');
 
   const { employeeId } = await params;
-  const [detail, documents, workforce] = await Promise.all([
+  const [detail, documents, workforce, documentation, portalAccessCandidate] = await Promise.all([
     getEmployeesModule().detail(identity.tenantId, employeeId),
     getDocumentsModule().listForEmployee(identity.tenantId, employeeId),
     getWorkforceModule().detail(identity.tenantId, employeeId),
+    getDocumentOnboardingService().getForManager(identity.tenantId, employeeId),
+    new PostgresEmployeeAccessAccounts().getEmployee(identity.tenantId, employeeId),
   ]);
   if (!detail || !workforce) notFound();
+  if (documentation) await getDocumentOnboardingService().recordManagerView({ tenantId: identity.tenantId, employeeId, actorUserId: identity.id });
 
   return (
     <main className="min-h-screen">
@@ -30,6 +35,8 @@ export default async function EmployeeDetailPage({
       <EmployeeDetail
         blobEnabled={isBlobStorageConfigured()}
         defaultTemporaryPassword={process.env.EMPLOYEE_DEFAULT_TEMPORARY_PASSWORD ?? ''}
+        documentation={documentation}
+        portalAccessCandidate={portalAccessCandidate}
         detail={{
           employee: { ...detail.employee, createdAt: detail.employee.createdAt.toISOString() },
           notes: detail.notes.map((note) => ({ ...note, createdAt: note.createdAt.toISOString() })),

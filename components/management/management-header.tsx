@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { LogoutButton } from '@/components/auth/logout-button';
+import { ManagementNotifications } from '@/components/management/management-notifications';
 
 type ManagementHeaderProps = {
   displayName: string;
@@ -24,6 +25,7 @@ export function ManagementHeader({ displayName, tenantSlug, active }: Management
         </div>
         <div className="flex items-center gap-3">
           <span className="hidden text-sm font-bold text-zinc-300 sm:block">{displayName}</span>
+          <ManagementNotifications />
           <LogoutButton />
         </div>
         <nav aria-label="Gestão" className="order-3 flex w-full gap-1 border-t border-white/8 pt-3">

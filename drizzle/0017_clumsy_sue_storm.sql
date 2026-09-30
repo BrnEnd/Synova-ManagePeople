@@ -1,0 +1,1 @@
+ALTER TABLE "document_onboarding_requests" ADD COLUMN "purged_at" timestamp with time zone;

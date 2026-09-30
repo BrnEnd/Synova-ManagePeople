@@ -26,6 +26,8 @@ const employee: AccessEmployee = {
   personalEmail: 'ana@example.com',
   status: 'active',
   onboardingPending: false,
+  documentationMode: 'legacy',
+  documentationStatus: 'legacy',
 };
 
 function request(body: Record<string, unknown>) {
@@ -122,6 +124,27 @@ describe('criação gerencial de acesso ao portal', () => {
     expect(response.status).toBe(candidate.userId ? 409 : 422);
     await expect(response.json()).resolves.toEqual({ error: message });
     expect(context.createdAccess).toHaveLength(candidate.userId ? 1 : 0);
+    expect(context.sent).toHaveLength(0);
+  });
+
+  test('bloqueia o acesso enquanto faltam contrato, alocação e condições vigentes', async () => {
+    const context = createAccessTestContext({ employee: {
+      ...employee,
+      operationalReadiness: {
+        hasActiveContract: false,
+        hasActiveAllocation: false,
+        hasFinancialCondition: false,
+        hasCommercialCondition: false,
+      },
+    } });
+    const response = await context.http.create(request({
+      temporaryPassword: 'Synova#2026!Inicial',
+      passwordConfirmation: 'Synova#2026!Inicial',
+    }), employee.id);
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({ error: 'Cadastre um Contrato ativo antes de criar o acesso ao portal.' });
+    expect(context.createdAccess).toHaveLength(0);
     expect(context.sent).toHaveLength(0);
   });
 

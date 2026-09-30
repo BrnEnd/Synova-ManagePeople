@@ -56,6 +56,7 @@ export class InMemoryEmployeeRepository implements EmployeeRepository {
   ) {
     const employee = this.employees.find((item) => item.id === employeeId && item.tenantId === tenantId);
     if (!employee || employee.status === 'inactive') return null;
+    if (status === 'active' && employee.documentationMode === 'self_service' && employee.documentationStatus !== 'approved') return null;
     Object.assign(employee, profile, { status, missingFields, onboardingPending: missingFields.length > 0 });
     this.events.push({ eventType: 'employee.updated', employeeId });
     return employee;

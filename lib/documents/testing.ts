@@ -25,4 +25,6 @@ export class InMemoryDocumentRepository implements DocumentRepository {
   async get(tenantId: string, documentId: string) {
     return this.documents.find((document) => document.tenantId === tenantId && document.id === documentId) ?? null;
   }
+
+  async recordAccess() {}
 }

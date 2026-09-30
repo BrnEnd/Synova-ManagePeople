@@ -19,6 +19,7 @@ export async function GET(request: Request, context: RouteContext<'/api/document
     headers.set('content-type', document.mimeType);
     headers.set('content-length', String(document.size));
     const disposition = new URL(request.url).searchParams.get('preview') === '1' ? 'inline' : 'attachment';
+    await getDocumentsModule().recordAccess(identity.tenantId, document, identity.id, disposition === 'inline' ? 'preview' : 'download');
     headers.set('content-disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(document.originalName)}`);
     headers.set('cache-control', 'private, no-store');
     return new Response(content.body, { headers });

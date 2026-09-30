@@ -4,7 +4,7 @@ import type { ManagementScope } from '@/lib/management/scope';
 
 export type CompetenceEvent = { id: string; eventType: string; fromStatus: string; toStatus: string; reason: string | null; actorName: string | null; occurredAt: Date };
 export type CompetenceReview = { competence: Competence & { employeeName: string }; entries: TimeEntry[]; events: CompetenceEvent[] };
-export type Notification = { id: string; type: string; title: string; message: string; competenceId: string | null; readAt: Date | null; createdAt: Date };
+export type Notification = { id: string; type: string; title: string; message: string; competenceId: string | null; employeeId: string | null; readAt: Date | null; createdAt: Date };
 
 export type ApprovalRepository = {
   submit(tenantId: string, employeeUserId: string, competenceId: string, eventId: string, notificationId: string, at: Date): Promise<CompetenceReview | null>;

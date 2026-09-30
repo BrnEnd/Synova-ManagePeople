@@ -3,10 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { and, eq, or, sql } from 'drizzle-orm';
 import { auditEvents, employees, externalHiringRecords } from '@/lib/db/schema';
 import { withTenantTransaction, type DatabaseTransaction } from '@/lib/db/transactions';
+import { isEmployeeDocumentationMode, isEmployeeDocumentationStatus } from '@/lib/document-onboarding/types';
 import type { Employee } from '@/lib/employees/module';
 import type { HiringRecord, HiringRepository } from '@/lib/integrations/hiring/module';
 
 function mapEmployee(row: typeof employees.$inferSelect): Employee {
+  if (!isEmployeeDocumentationMode(row.documentationMode) || !isEmployeeDocumentationStatus(row.documentationStatus)) {
+    throw new Error('Estado documental do funcionário inválido.');
+  }
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -20,6 +24,10 @@ function mapEmployee(row: typeof employees.$inferSelect): Employee {
     entryDate: row.entryDate,
     professionalTitle: row.professionalTitle,
     employmentType: row.employmentType,
+    gender: row.gender as Employee['gender'],
+    raceColor: row.raceColor,
+    documentationMode: row.documentationMode,
+    documentationStatus: row.documentationStatus,
     status: row.status,
     onboardingPending: row.onboardingPending,
     missingFields: row.missingFields,

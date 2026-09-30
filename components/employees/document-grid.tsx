@@ -1,8 +1,9 @@
 import { portalPath } from '@/lib/routing/base-path';
+import type { DocumentType } from '@/lib/documents/module';
 
 export type DocumentGridItem = {
   id: string;
-  type: 'identification' | 'address_proof' | 'contract' | 'payment_forecast' | 'invoice' | 'payment_receipt' | 'other';
+  type: DocumentType;
   originalName: string;
   mimeType: string;
   size: number;
@@ -12,6 +13,15 @@ export type DocumentGridItem = {
 const labels: Record<DocumentGridItem['type'], string> = {
   identification: 'Identificação',
   address_proof: 'Comprovante de endereço',
+  voter_registration: 'Título de eleitor',
+  dependent_certificate: 'Documentos de dependentes',
+  military_certificate: 'Certificado de reservista',
+  marriage_certificate: 'Certidão de casamento',
+  medical_admission: 'ASO admissional',
+  work_card: 'Carteira de Trabalho',
+  photo: 'Foto 3x4',
+  pis_proof: 'Comprovante do PIS/NIS',
+  cnpj_card: 'Cartão CNPJ',
   contract: 'Contrato',
   payment_forecast: 'Previsão de pagamento',
   invoice: 'Nota Fiscal',

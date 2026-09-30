@@ -121,11 +121,34 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       });
 
       const accessEmployeeId = randomUUID();
+      const accessClientId = randomUUID();
+      const accessContractId = randomUUID();
+      const accessAllocationId = randomUUID();
       await normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
         await transaction`
           insert into employees (id, tenant_id, full_name, email, status, onboarding_pending, created_at, updated_at)
           values (${accessEmployeeId}, ${tenantId}, 'Acesso concorrente', 'access@integration.test', 'active', false, '2026-07-01', '2026-07-01')
+        `;
+        await transaction`
+          insert into clients (id, tenant_id, name, status)
+          values (${accessClientId}, ${tenantId}, 'Cliente do acesso', 'active')
+        `;
+        await transaction`
+          insert into contracts (id, tenant_id, employee_id, contract_type, start_date, status, created_by_user_id)
+          values (${accessContractId}, ${tenantId}, ${accessEmployeeId}, 'Prestação de serviços', '2026-07-01', 'active', ${userResult.user.id})
+        `;
+        await transaction`
+          insert into allocations (id, tenant_id, employee_id, client_id, manager_user_id, start_date, status, created_by_user_id)
+          values (${accessAllocationId}, ${tenantId}, ${accessEmployeeId}, ${accessClientId}, ${userResult.user.id}, '2026-07-01', 'active', ${userResult.user.id})
+        `;
+        await transaction`
+          insert into financial_conditions (id, tenant_id, employee_id, hourly_rate_cents, effective_from, created_by_user_id)
+          values (${randomUUID()}, ${tenantId}, ${accessEmployeeId}, 10000, '2026-07-01', ${userResult.user.id})
+        `;
+        await transaction`
+          insert into commercial_conditions (id, tenant_id, allocation_id, hourly_rate_cents, effective_from, created_by_user_id)
+          values (${randomUUID()}, ${tenantId}, ${accessAllocationId}, 15000, '2026-07-01', ${userResult.user.id})
         `;
       });
       const accessNotifications: string[] = [];
@@ -176,11 +199,28 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
       })).rejects.toBeInstanceOf(EmployeeAccessNotFoundError);
 
       const conflictingEmployeeId = randomUUID();
+      const conflictingAllocationId = randomUUID();
       await normal.begin(async (transaction) => {
         await transaction`select set_config('app.tenant_id', ${tenantId}, true)`;
         await transaction`
           insert into employees (id, tenant_id, full_name, email, status, onboarding_pending, created_at, updated_at)
           values (${conflictingEmployeeId}, ${tenantId}, 'E-mail em conflito', ${userResult.user.email}, 'active', false, '2026-07-01', '2026-07-01')
+        `;
+        await transaction`
+          insert into contracts (id, tenant_id, employee_id, contract_type, start_date, status, created_by_user_id)
+          values (${randomUUID()}, ${tenantId}, ${conflictingEmployeeId}, 'Prestação de serviços', '2026-07-01', 'active', ${userResult.user.id})
+        `;
+        await transaction`
+          insert into allocations (id, tenant_id, employee_id, client_id, manager_user_id, start_date, status, created_by_user_id)
+          values (${conflictingAllocationId}, ${tenantId}, ${conflictingEmployeeId}, ${accessClientId}, ${userResult.user.id}, '2026-07-01', 'active', ${userResult.user.id})
+        `;
+        await transaction`
+          insert into financial_conditions (id, tenant_id, employee_id, hourly_rate_cents, effective_from, created_by_user_id)
+          values (${randomUUID()}, ${tenantId}, ${conflictingEmployeeId}, 10000, '2026-07-01', ${userResult.user.id})
+        `;
+        await transaction`
+          insert into commercial_conditions (id, tenant_id, allocation_id, hourly_rate_cents, effective_from, created_by_user_id)
+          values (${randomUUID()}, ${tenantId}, ${conflictingAllocationId}, 15000, '2026-07-01', ${userResult.user.id})
         `;
       });
       await expect(employeeAccess.create({
@@ -603,6 +643,9 @@ describe.skipIf(!databaseUrl || !provisioningDatabaseUrl)('integração PostgreS
           await transaction`delete from financial_conditions where tenant_id = ${tenantId}`;
           await transaction`delete from allocations where tenant_id = ${tenantId}`;
           await transaction`delete from contracts where tenant_id = ${tenantId}`;
+          await transaction`delete from document_onboarding_files where tenant_id = ${tenantId}`;
+          await transaction`delete from document_onboarding_items where tenant_id = ${tenantId}`;
+          await transaction`delete from document_onboarding_requests where tenant_id = ${tenantId}`;
           await transaction`delete from documents where tenant_id = ${tenantId}`;
           await transaction`delete from clients where tenant_id = ${tenantId}`;
           await transaction`delete from external_hiring_records where tenant_id = ${tenantId}`;

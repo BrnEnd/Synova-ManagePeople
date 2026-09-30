@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { and, asc, desc, eq, isNull, ne, or } from 'drizzle-orm';
 import { auditEvents, documents, employeeNotes, employees, users } from '@/lib/db/schema';
 import { withTenantTransaction } from '@/lib/db/transactions';
+import { isEmployeeDocumentationMode, isEmployeeDocumentationStatus } from '@/lib/document-onboarding/types';
 import type {
   Employee,
   EmployeeHistoryEvent,
@@ -13,6 +14,9 @@ import type {
 } from '@/lib/employees/module';
 
 function mapEmployee(row: typeof employees.$inferSelect): Employee {
+  if (!isEmployeeDocumentationMode(row.documentationMode) || !isEmployeeDocumentationStatus(row.documentationStatus)) {
+    throw new Error('Estado documental do funcionário inválido.');
+  }
   return {
     id: row.id,
     tenantId: row.tenantId,
@@ -26,6 +30,10 @@ function mapEmployee(row: typeof employees.$inferSelect): Employee {
     entryDate: row.entryDate,
     professionalTitle: row.professionalTitle,
     employmentType: row.employmentType,
+    gender: row.gender as Employee['gender'],
+    raceColor: row.raceColor,
+    documentationMode: row.documentationMode,
+    documentationStatus: row.documentationStatus,
     status: row.status,
     onboardingPending: row.onboardingPending,
     missingFields: row.missingFields,
@@ -79,6 +87,10 @@ export class PostgresEmployeeRepository implements EmployeeRepository {
         entryDate: employee.entryDate,
         professionalTitle: employee.professionalTitle,
         employmentType: employee.employmentType,
+        gender: employee.gender,
+        raceColor: employee.raceColor,
+        documentationMode: employee.documentationMode,
+        documentationStatus: employee.documentationStatus,
         status: employee.status,
         onboardingPending: employee.onboardingPending,
         missingFields: employee.missingFields,
@@ -138,6 +150,10 @@ export class PostgresEmployeeRepository implements EmployeeRepository {
         eq(employees.tenantId, tenantId),
         eq(employees.id, employeeId),
         ne(employees.status, 'inactive'),
+        status === 'active' ? or(
+          eq(employees.documentationMode, 'legacy'),
+          eq(employees.documentationStatus, 'approved'),
+        ) : undefined,
       )).returning();
       if (!updated) return null;
       await tx.insert(auditEvents).values({

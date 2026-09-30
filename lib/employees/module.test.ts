@@ -148,6 +148,35 @@ describe('funcionários', () => {
     })).rejects.toThrow('Conclua as pendências');
   });
 
+  test('não ativa funcionário do fluxo digital antes da aprovação documental', async () => {
+    const { module, repository } = subject();
+    const employee = await module.create({ tenantId: tenantA, actorUserId: actor, fullName: 'Ana Souza' });
+    employee.documentationMode = 'self_service';
+    employee.documentationStatus = 'submitted';
+    repository.addIdentificationDocument(tenantA, employee.id);
+    const command = {
+      tenantId: tenantA,
+      employeeId: employee.id,
+      actorUserId: actor,
+      status: 'active' as const,
+      profile: {
+        fullName: 'Ana Souza',
+        personalEmail: 'ana@example.com',
+        corporateEmail: 'ana@synova.com.br',
+        phone: '11999999999',
+        identificationDocument: '123',
+        entryDate: '2026-08-01',
+        professionalTitle: 'Consultora',
+        employmentType: 'clt',
+        address: { street: 'Rua Um', city: 'São Paulo', state: 'SP', postalCode: '01000-000', country: 'Brasil' },
+      },
+    };
+
+    await expect(module.update(command)).rejects.toThrow('documentação precisa ser aprovada');
+    employee.documentationStatus = 'approved';
+    await expect(module.update(command)).resolves.toMatchObject({ status: 'active' });
+  });
+
   test('registra anotação com autor e não permite escrever em outro tenant', async () => {
     const { module, repository } = subject();
     const employee = await module.create({ tenantId: tenantA, actorUserId: actor, fullName: 'Ana Souza' });

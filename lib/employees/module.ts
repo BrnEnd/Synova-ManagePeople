@@ -1,4 +1,7 @@
 export type EmployeeStatus = 'pre_registration' | 'active' | 'inactive';
+import type { EmployeeDocumentationMode, EmployeeDocumentationStatus } from '@/lib/document-onboarding/types';
+
+export type { EmployeeDocumentationStatus } from '@/lib/document-onboarding/types';
 
 export type EmployeeAddress = {
   street: string;
@@ -24,6 +27,10 @@ export type Employee = {
   entryDate: string | null;
   professionalTitle: string | null;
   employmentType: string;
+  gender: 'male' | 'female' | null;
+  raceColor: string | null;
+  documentationMode: EmployeeDocumentationMode;
+  documentationStatus: EmployeeDocumentationStatus;
   status: EmployeeStatus;
   onboardingPending: boolean;
   missingFields: string[];
@@ -187,6 +194,10 @@ export function createEmployeesModule(dependencies: Dependencies) {
         userId: command.userId ?? null,
         ...profile,
         status: 'pre_registration',
+        gender: null,
+        raceColor: null,
+        documentationMode: 'legacy',
+        documentationStatus: 'legacy',
         onboardingPending: missingFields.length > 0,
         missingFields,
         createdAt,
@@ -211,6 +222,11 @@ export function createEmployeesModule(dependencies: Dependencies) {
     }) {
       const profile = normalizedProfile(command.profile);
       if (profile.fullName.length < 2) throw new InvalidEmployeeError('Informe o nome completo do funcionário.');
+      const current = await dependencies.repository.get(command.tenantId, command.employeeId);
+      if (!current) throw new Error('Funcionário não encontrado.');
+      if (command.status === 'active' && current.documentationMode === 'self_service' && current.documentationStatus !== 'approved') {
+        throw new InvalidEmployeeError('A documentação precisa ser aprovada antes de ativar o funcionário.');
+      }
       const hasIdentificationDocument = await dependencies.repository.hasIdentificationDocument(
         command.tenantId,
         command.employeeId,
